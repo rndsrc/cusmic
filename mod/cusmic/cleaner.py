@@ -45,6 +45,7 @@ class Cleaner:
             lap   = laplacian(clean)
             noise = image.noise(clean, mode=self.border_mode)
             sig   = significance(lap, noise, mode=self.border_mode)
+            fine  = fine_structure(clean, noise, mode=self.border_mode)
 
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new:

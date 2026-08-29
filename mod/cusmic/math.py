@@ -45,3 +45,10 @@ def significance(lap, noise, mode, order=5):
     """Remove smooth structure from Laplacian significance (eqs 11, 13)"""
     S = lap / (2 * noise)
     return S - median_filter(S, size=order, mode=mode)
+
+
+def fine_structure(clean, noise, mode, floor=0.01):
+    """Noise-normalized fine structure for star rejection (eq 14)"""
+    m = median_filter(clean, size=3, mode=mode)
+    F = m - median_filter(m, size=7, mode=mode)
+    return cp.maximum(F / noise, floor)
