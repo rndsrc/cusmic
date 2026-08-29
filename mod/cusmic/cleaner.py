@@ -32,5 +32,11 @@ class Cleaner:
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
         clean = cp.where(cp.isfinite(image.data), image.data, 0)
+        if image.background is not None:
+            clean += image.background
+
         cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
+
+        if image.background is not None:
+            clean -= image.background
         return cp.where(cosmic_mask, clean, image.data), cosmic_mask
