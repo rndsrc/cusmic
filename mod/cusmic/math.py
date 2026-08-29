@@ -14,7 +14,7 @@
 
 
 import cupy as cp
-from cupyx.scipy.ndimage import convolve
+from cupyx.scipy.ndimage import convolve, median_filter
 
 
 def mklaplacian(dtype, mode):
@@ -39,3 +39,9 @@ def mklaplacian(dtype, mode):
         return (a + b) + (c + d)
 
     return laplacian
+
+
+def significance(lap, noise, mode, order=5):
+    """Remove smooth structure from Laplacian significance (eqs 11, 13)"""
+    S = lap / (2 * noise)
+    return S - median_filter(S, size=order, mode=mode)

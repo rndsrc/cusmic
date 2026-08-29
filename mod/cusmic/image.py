@@ -31,7 +31,7 @@ class Image:
     effective_gain: Array | None = None
     readnoise:      float | None = None
 
-    def noise(self, image=None, order=5, mode=None, floor=1e-5):
+    def noise(self, image=None, mode=None, order=5, floor=1e-5):
         if self.error is not None:
             return self.error
         else:
