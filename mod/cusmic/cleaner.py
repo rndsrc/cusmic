@@ -36,6 +36,12 @@ class Cleaner:
             clean += image.background
 
         cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
+        new         = 0
+
+        for i in range(self.maxiter):
+            print("Iteration {i+1}: {new} new cosmic-ray pixels")
+            if not new:
+                break
 
         if image.background is not None:
             clean -= image.background
