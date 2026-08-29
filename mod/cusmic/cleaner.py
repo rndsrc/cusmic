@@ -15,6 +15,8 @@
 
 from dataclasses import dataclass
 
+from .image import Image, Array
+
 
 @dataclass
 class Cleaner:
@@ -25,3 +27,6 @@ class Cleaner:
     neighbor_threshold: float = 3
     maxiter:            int   = 4
     border_mode:        str   = "mirror"
+
+    def __call__(self, image: Image) -> tuple[Array, Array]:
+        pass
