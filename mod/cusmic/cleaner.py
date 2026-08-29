@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import cupy as cp
 
 from .image import Image, Array
+from .math  import mklaplacian
 
 
 @dataclass
@@ -31,6 +32,8 @@ class Cleaner:
     border_mode:        str   = "mirror"
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
+        laplacian = mklaplacian(image.data.dtype, self.border_mode)
+
         clean = cp.where(cp.isfinite(image.data), image.data, 0)
         if image.background is not None:
             clean += image.background
@@ -39,6 +42,8 @@ class Cleaner:
         new         = 0
 
         for i in range(self.maxiter):
+            lap = laplacian(clean)
+
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new:
                 break
