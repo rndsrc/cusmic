@@ -15,7 +15,9 @@
 
 from dataclasses import dataclass
 
+import cupy as cp
 from cupy import ndarray as Array
+from cupyx.scipy.ndimage import median_filter
 
 
 @dataclass
@@ -28,3 +30,14 @@ class Image:
     background:     Array | None = None
     effective_gain: Array | None = None
     readnoise:      float | None = None
+
+    def noise(self, image=None, order=5, mode=None, floor=1e-5):
+        if self.error is not None:
+            return self.error
+        else:
+            """Poisson and read noise from the order*order median (eq 10)"""
+            n = self.readnoise
+            g = self.effective_gain
+            m = median_filter(image, size=order, mode=mode)
+            cp.maximum(m, floor, out=m)
+            return cp.sqrt(n * n + g * m) / g

@@ -42,7 +42,8 @@ class Cleaner:
         new         = 0
 
         for i in range(self.maxiter):
-            lap = laplacian(clean)
+            lap   = laplacian(clean)
+            noise = image.noise(clean, mode=self.border_mode)
 
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new:
