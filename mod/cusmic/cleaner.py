@@ -15,6 +15,8 @@
 
 from dataclasses import dataclass
 
+import cupy as cp
+
 from .image import Image, Array
 
 
@@ -29,4 +31,6 @@ class Cleaner:
     border_mode:        str   = "mirror"
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
-        pass
+        clean = cp.where(cp.isfinite(image.data), image.data, 0)
+        cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
+        return cp.where(cosmic_mask, clean, image.data), cosmic_mask
