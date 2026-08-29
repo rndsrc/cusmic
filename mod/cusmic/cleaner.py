@@ -59,6 +59,8 @@ class Cleaner:
             if not new or not donors:
                 break
 
+            clean = replace(clean, cosmic_mask, image.mask)
+
         if image.background is not None:
             clean -= image.background
         return cp.where(cosmic_mask, clean, image.data), cosmic_mask
