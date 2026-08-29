@@ -105,3 +105,20 @@ def expanded_median(clean, donors, y, x):
             values.sort()
             n = values.size
             return values[n//2] if n%2 else (values[n//2-1]+values[n//2])/2
+
+
+def replace(clean, cosmic_mask, mask):
+    """Replace flagged pixels using fixed donors and expanding 5x5 windows."""
+    donors  = ~cosmic_mask & ~mask
+    targets = cp.argwhere(cosmic_mask & ~mask)
+    cleaned = clean.copy()
+    ry, rx  = (min(RADIUS, n-1) for n in clean.shape)
+    offsets = cp.mgrid[-ry:ry+1, -rx:rx+1].reshape(2, -1)
+    for start in range(0, len(targets), BATCH):
+        batch = targets[start:start+BATCH]
+        y, x = batch.T
+        median, found = local_median(clean, donors, batch, offsets)
+        cleaned[y, x] = cp.where(found, median, clean[y, x])
+        for row, column in cp.asnumpy(batch[~found]).tolist():
+            cleaned[row, column] = expanded_median(clean, donors, row, column)
+    return cleaned
