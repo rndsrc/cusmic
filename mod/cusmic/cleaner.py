@@ -52,8 +52,11 @@ class Cleaner:
             candidates = grow(candidates, sig, allowed, self.cr_threshold, self.neighbor_threshold)
             new = int(cp.count_nonzero(candidates & ~cosmic_mask))
 
+            cosmic_mask |= candidates
+            donors = int(cp.count_nonzero(allowed & ~cosmic_mask))
+
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
-            if not new:
+            if not new or not donors:
                 break
 
         if image.background is not None:
