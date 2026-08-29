@@ -17,6 +17,10 @@ import cupy as cp
 from cupyx.scipy.ndimage import convolve, median_filter, binary_dilation
 
 
+RADIUS = 2     # replacement window is 5x5 (paper sec 3.1)
+BATCH  = 8192  # replacement gathers at most BATCH x 25 values at a time
+
+
 def mklaplacian(dtype, mode):
 
     # Discrete Laplacian for the 2x2-replicated image (paper eq 4);
@@ -69,3 +73,20 @@ def fine_structure(clean, noise, mode, floor=0.01):
 def detect(sig, fine, allowed, contrast, cr_threshold):
     """Select significant pixels with sufficient Laplacian contrast."""
     return (sig > cr_threshold) & (sig / fine > contrast) & allowed
+
+
+def local_median(clean, donors, targets, offsets):
+    """Median of each clipped window; also report which windows have donors."""
+    ny, nx = clean.shape
+    y,  x  = targets.T
+    dy, dx = offsets
+    yy, xx = y[:, None] + dy, x[:, None] + dx
+    inside = (yy >= 0) & (yy < ny) & (xx >= 0) & (xx < nx)
+    yy, xx = yy.clip(0, ny-1), xx.clip(0, nx-1)
+    valid  = inside & donors[yy, xx]
+    values = cp.where(valid, clean[yy, xx], clean.dtype.type(cp.inf))
+    values.sort(axis=1)  # Donors first, ascending; the +inf padding sorts last.
+    count = cp.count_nonzero(valid, axis=1)
+    rows  = cp.arange(len(count))
+    low, high = values[rows, (count-1)//2], values[rows, count//2]
+    return cp.where(count%2, low, (low+high)/2), count > 0
