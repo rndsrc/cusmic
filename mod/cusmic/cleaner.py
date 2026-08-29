@@ -33,6 +33,7 @@ class Cleaner:
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
         laplacian = mklaplacian(image.data.dtype, self.border_mode)
+        grow      = mkgrow()
 
         clean = cp.where(cp.isfinite(image.data), image.data, 0)
         if image.background is not None:
@@ -49,6 +50,7 @@ class Cleaner:
             fine  = fine_structure(clean, noise, mode=self.border_mode)
 
             candidates = detect(sig, fine, allowed, self.contrast, self.cr_threshold)
+            candidates = grow(candidates, sig, allowed, self.cr_threshold, self.neighbor_threshold)
 
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new:
