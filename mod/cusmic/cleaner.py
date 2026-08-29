@@ -38,6 +38,7 @@ class Cleaner:
         if image.background is not None:
             clean += image.background
 
+        allowed     = cp.logical_not(image.mask)
         cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
         new         = 0
 
@@ -46,6 +47,8 @@ class Cleaner:
             noise = image.noise(clean, mode=self.border_mode)
             sig   = significance(lap, noise, mode=self.border_mode)
             fine  = fine_structure(clean, noise, mode=self.border_mode)
+
+            candidates = detect(sig, fine, allowed, self.contrast, self.cr_threshold)
 
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new:

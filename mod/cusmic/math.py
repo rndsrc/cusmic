@@ -52,3 +52,8 @@ def fine_structure(clean, noise, mode, floor=0.01):
     m = median_filter(clean, size=3, mode=mode)
     F = m - median_filter(m, size=7, mode=mode)
     return cp.maximum(F / noise, floor)
+
+
+def detect(sig, fine, allowed, contrast, cr_threshold):
+    """Select significant pixels with sufficient Laplacian contrast."""
+    return (sig > cr_threshold) & (sig / fine > contrast) & allowed
