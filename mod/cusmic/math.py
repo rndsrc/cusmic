@@ -90,3 +90,18 @@ def local_median(clean, donors, targets, offsets):
     rows  = cp.arange(len(count))
     low, high = values[rows, (count-1)//2], values[rows, count//2]
     return cp.where(count%2, low, (low+high)/2), count > 0
+
+
+def expanded_median(clean, donors, y, x):
+    """Expand from radius 3 until a donor is found."""
+    ny, nx = clean.shape
+    for r in range(RADIUS + 1, max(ny, nx) + 1):
+        window = (
+            slice(max(0, y-r), min(ny, y+r+1)),
+            slice(max(0, x-r), min(nx, x+r+1)),
+        )
+        values = clean[window][donors[window]]
+        if values.size:
+            values.sort()
+            n = values.size
+            return values[n//2] if n%2 else (values[n//2-1]+values[n//2])/2
