@@ -41,7 +41,6 @@ class Cleaner:
 
         allowed     = cp.logical_not(image.mask)
         cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
-        new         = 0
 
         for i in range(self.maxiter):
             lap   = laplacian(clean)
@@ -51,6 +50,7 @@ class Cleaner:
 
             candidates = detect(sig, fine, allowed, self.contrast, self.cr_threshold)
             candidates = grow(candidates, sig, allowed, self.cr_threshold, self.neighbor_threshold)
+            new = int(cp.count_nonzero(candidates & ~cosmic_mask))
 
             print("Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new:
