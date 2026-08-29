@@ -14,7 +14,7 @@
 
 
 import cupy as cp
-from cupyx.scipy.ndimage import convolve, median_filter
+from cupyx.scipy.ndimage import convolve, median_filter, binary_dilation
 
 
 def mklaplacian(dtype, mode):
@@ -39,6 +39,18 @@ def mklaplacian(dtype, mode):
         return (a + b) + (c + d)
 
     return laplacian
+
+
+def mkgrow():
+    structure = cp.ones((3, 3), dtype=bool)
+
+    def grow(candidates, sig, allowed, cr_threshold, neighbor_threshold):
+        """Grow at the cosmic threshold, then at the neighbor threshold."""
+        for threshold in (cr_threshold, neighbor_threshold):
+            candidates = binary_dilation(candidates, structure) & (sig > threshold) & allowed
+        return candidates
+
+    return grow
 
 
 def significance(lap, noise, mode, order=5):
