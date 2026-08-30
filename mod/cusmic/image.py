@@ -17,7 +17,8 @@ from dataclasses import dataclass
 
 import cupy as cp
 from cupy import ndarray as Array
-from cupyx.scipy.ndimage import median_filter
+
+from .core import noise_model
 
 
 @dataclass
@@ -31,15 +32,6 @@ class Image:
     effective_gain: Array | None = None
     readnoise:      float | None = None
 
-    def noise(self, image=None, mode=None, order=5, floor=1e-5):
+    def noise(self, image=None, mode=None):
         """Given errors, else the noise model evaluated on `clean`"""
-
-        if self.error is not None:
-            return self.error
-        else:
-            """Poisson and read noise from the order*order median (eq 10)"""
-            n = self.readnoise
-            g = self.effective_gain
-            m = median_filter(image, size=order, mode=mode)
-            cp.maximum(m, floor, out=m)
-            return cp.sqrt(n * n + g * m) / g
+        return noise_model(image, self.effective_gain, self.readnoise, mode) if self.error is None else self.error

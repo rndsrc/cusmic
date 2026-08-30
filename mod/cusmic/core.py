@@ -19,6 +19,7 @@ from cupyx.scipy.ndimage import convolve, median_filter, binary_dilation
 
 ORDER  = 5     # median filter
 FLOOR  = 0.01  # fine structure floor
+NOISE  = 1e-5  # median floor in the noise model (eq 10)
 RADIUS = 2     # replacement window is 5x5 (paper sec 3.1)
 BATCH  = 8192  # replacement gathers at most BATCH x 25 values at a time
 
@@ -57,6 +58,12 @@ def mkgrow():
         return candidates
 
     return grow
+
+
+def noise_model(clean, gain, readnoise, mode):
+    """Poisson and read noise from the 5x5 median (eq 10)"""
+    median = cp.maximum(median_filter(clean, size=ORDER, mode=mode), NOISE)
+    return cp.sqrt(readnoise*readnoise + gain*median) / gain
 
 
 def significance(lap, noise, mode):
