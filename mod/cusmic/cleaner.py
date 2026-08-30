@@ -46,8 +46,8 @@ class Cleaner:
         if image.background is not None:
             clean += image.background
 
-        allowed     = cp.logical_not(0 if image.mask is None else image.mask)
-        cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
+        allowed = cp.logical_not(0 if image.mask is None else image.mask)
+        crmask  = cp.zeros(image.data.shape, dtype=bool)
 
         for i in range(self.maxiter):
             lap   = laplacian(clean)
@@ -57,17 +57,17 @@ class Cleaner:
 
             candidates = detect(sig, fine, allowed, self.contrast, self.cr_threshold)
             candidates = grow(candidates, sig, allowed, self.cr_threshold, self.neighbor_threshold)
-            new = int(cp.count_nonzero(candidates & ~cosmic_mask))
+            new = int(cp.count_nonzero(candidates & ~crmask))
 
-            cosmic_mask |= candidates
-            donors = int(cp.count_nonzero(allowed & ~cosmic_mask))
+            crmask |= candidates
+            donors = int(cp.count_nonzero(allowed & ~crmask))
 
             log.info("Iteration %d: %d new cosmic-ray pixels", i+1, new)
             if not new or not donors:
                 break
 
-            clean = replace(clean, cosmic_mask, 0 if image.mask is None else image.mask)
+            clean = replace(clean, crmask, 0 if image.mask is None else image.mask)
 
         if image.background is not None:
             clean -= image.background
-        return cp.where(cosmic_mask, clean, image.data), cosmic_mask
+        return cp.where(crmask, clean, image.data), crmask
