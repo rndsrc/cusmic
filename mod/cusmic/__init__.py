@@ -16,12 +16,16 @@
 """Re-implement the L.A.Cosmic image cleaning algorithm with CuPy"""
 
 
-__version__ = "0.1.0"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("cusmic")
+except PackageNotFoundError:
+    __version__ = "local-dev"
 
 
 from .image   import Image
 from .cleaner import Cleaner
 from .api     import remove_cosmics
-
 
 __all__ = ["Image", "Cleaner", "remove_cosmics"]
