@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import logging
 from dataclasses import dataclass
 
 import cupy as cp
@@ -20,6 +21,9 @@ import cupy as cp
 from .image   import Image, Array
 from .filters import *
 from .replace import replace
+
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,7 +62,7 @@ class Cleaner:
             cosmic_mask |= candidates
             donors = int(cp.count_nonzero(allowed & ~cosmic_mask))
 
-            print(f"Iteration {i+1}: {new} new cosmic-ray pixels")
+            log.info("Iteration %d: %d new cosmic-ray pixels", i+1, new)
             if not new or not donors:
                 break
 
