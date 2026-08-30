@@ -30,6 +30,8 @@ def remove_cosmics(
     maxiter=4,
     border_mode="mirror",
 ):
+    """Remove cosmic rays with L.A.Cosmic algorithm; same signature as lacosmic.remove_cosmics()"""
+
     image = Image(data, error, mask, background, effective_gain, readnoise)
     clean = Cleaner(contrast, cr_threshold, neighbor_threshold, maxiter, border_mode)
     return clean(image)

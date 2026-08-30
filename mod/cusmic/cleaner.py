@@ -32,6 +32,8 @@ class Cleaner:
     border_mode:        str   = "mirror"
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
+        """Return the cleaned image and the cosmic-ray mask"""
+
         laplacian = mklaplacian(image.data.dtype, self.border_mode)
         grow      = mkgrow()
 

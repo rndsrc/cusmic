@@ -32,6 +32,8 @@ class Image:
     readnoise:      float | None = None
 
     def noise(self, image=None, mode=None, order=5, floor=1e-5):
+        """Given errors, else the noise model evaluated on `clean`"""
+
         if self.error is not None:
             return self.error
         else:
