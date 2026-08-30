@@ -55,7 +55,7 @@ class Cleaner:
             cosmic_mask |= candidates
             donors = int(cp.count_nonzero(allowed & ~cosmic_mask))
 
-            print("Iteration {i+1}: {new} new cosmic-ray pixels")
+            print(f"Iteration {i+1}: {new} new cosmic-ray pixels")
             if not new or not donors:
                 break
 
