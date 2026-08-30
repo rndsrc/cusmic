@@ -19,4 +19,9 @@
 __version__ = "0.1.0"
 
 
-from .api import remove_cosmics
+from .image   import Image
+from .cleaner import Cleaner
+from .api     import remove_cosmics
+
+
+__all__ = ["Image", "Cleaner", "remove_cosmics"]
