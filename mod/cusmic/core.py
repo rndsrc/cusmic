@@ -17,6 +17,8 @@ import cupy as cp
 from cupyx.scipy.ndimage import convolve, median_filter, binary_dilation
 
 
+ORDER  = 5     # median filter
+FLOOR  = 0.01  # fine structure floor
 RADIUS = 2     # replacement window is 5x5 (paper sec 3.1)
 BATCH  = 8192  # replacement gathers at most BATCH x 25 values at a time
 
@@ -57,17 +59,17 @@ def mkgrow():
     return grow
 
 
-def significance(lap, noise, mode, order=5):
+def significance(lap, noise, mode):
     """Remove smooth structure from Laplacian significance (eqs 11, 13)"""
     S = lap / (2 * noise)
-    return S - median_filter(S, size=order, mode=mode)
+    return S - median_filter(S, size=ORDER, mode=mode)
 
 
-def fine_structure(clean, noise, mode, floor=0.01):
+def fine_structure(clean, noise, mode):
     """Noise-normalized fine structure for star rejection (eq 14)"""
-    m = median_filter(clean, size=3, mode=mode)
-    F = m - median_filter(m, size=7, mode=mode)
-    return cp.maximum(F / noise, floor)
+    m = median_filter(clean, size=ORDER-2, mode=mode)
+    F = m - median_filter(m, size=ORDER+2, mode=mode)
+    return cp.maximum(F / noise, FLOOR)
 
 
 def detect(sig, fine, allowed, contrast, cr_threshold):
@@ -95,7 +97,7 @@ def local_median(clean, donors, targets, offsets):
 def expanded_median(clean, donors, y, x):
     """Expand from radius 3 until a donor is found."""
     ny, nx = clean.shape
-    for r in range(RADIUS + 1, max(ny, nx) + 1):
+    for r in range(RADIUS+1, max(ny, nx)+1):
         window = (
             slice(max(0, y-r), min(ny, y+r+1)),
             slice(max(0, x-r), min(nx, x+r+1)),
