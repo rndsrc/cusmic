@@ -17,8 +17,9 @@ from dataclasses import dataclass
 
 import cupy as cp
 
-from .image import Image, Array
-from .core  import *
+from .image   import Image, Array
+from .core    import *
+from .replace import replace
 
 
 @dataclass
