@@ -39,7 +39,7 @@ class Cleaner:
         if image.background is not None:
             clean += image.background
 
-        allowed     = cp.logical_not(image.mask)
+        allowed     = cp.logical_not(0 if image.mask is None else image.mask)
         cosmic_mask = cp.zeros(image.data.shape, dtype=bool)
 
         for i in range(self.maxiter):
@@ -59,7 +59,7 @@ class Cleaner:
             if not new or not donors:
                 break
 
-            clean = replace(clean, cosmic_mask, image.mask)
+            clean = replace(clean, cosmic_mask, 0 if image.mask is None else image.mask)
 
         if image.background is not None:
             clean -= image.background
