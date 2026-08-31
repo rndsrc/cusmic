@@ -21,6 +21,7 @@ import numpy as np
 from astropy.io import fits
 
 from . import remove_cosmics
+from .io import read_fits
 
 INPUT  = click.Path(exists=True, dir_okay=False, path_type=Path)
 OUTPUT = click.Path(dir_okay=False, path_type=Path)
@@ -29,14 +30,13 @@ OUTPUT = click.Path(dir_okay=False, path_type=Path)
 def read_image(path):
     """Read a finite, two-dimensional FITS image in native float64 format."""
     try:
-        data, header = fits.getdata(path, header=True)
-    except (OSError, ValueError) as exc:
+        data, header = read_fits(path, dtype="float64")
+    except (OSError, ValueError, TypeError) as exc:
         raise click.ClickException(f"{path}: {exc}") from exc
 
-    if data.ndim != 2 or not data.size or data.dtype.kind not in "iuf":
+    if data.ndim != 2 or not data.size:
         raise click.ClickException(f"{path}: expected a nonempty 2D real image")
 
-    data = data.astype(np.float64)
     if not np.isfinite(data).all():
         raise click.ClickException(f"{path}: image contains nonfinite pixels")
 
@@ -98,7 +98,7 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
     ])
     try:
         result.writeto(output, checksum=True)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(f"Saved {output} ({mask.sum():,} cosmic-ray pixels)")
