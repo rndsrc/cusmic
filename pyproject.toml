@@ -4,7 +4,11 @@ requires = ["setuptools>=80", "setuptools-scm[simple]>=8"]
 [project]
 name = "cusmic"
 dynamic = ["version"]
-dependencies = ["cupy", "numpy", "astropy", "click"]
+dependencies = ["cupy"]
+
+[project.optional-dependencies]
+slim = []
+cli = ["click", "numpy", "astropy"]
 
 [project.scripts]
 cusmic = "cusmic.__main__:main"
