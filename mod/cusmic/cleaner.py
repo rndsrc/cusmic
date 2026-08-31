@@ -18,10 +18,9 @@ from dataclasses import dataclass
 
 import cupy as cp
 
-from .image   import Image, Array
-from .filters import *
+from .filters import detect, fine_structure, mkgrow, mklaplacian, significance
+from .image import Array, Image
 from .replace import replace
-
 
 log = logging.getLogger(__name__)
 

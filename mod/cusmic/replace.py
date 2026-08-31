@@ -15,7 +15,6 @@
 
 import cupy as cp
 
-
 RADIUS = 2     # replacement window is 5x5 (paper sec 3.1)
 BATCH  = 8192  # replacement gathers at most BATCH x 25 values at a time
 

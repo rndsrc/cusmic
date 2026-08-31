@@ -14,8 +14,7 @@
 
 
 import cupy as cp
-from cupyx.scipy.ndimage import convolve, median_filter, binary_dilation
-
+from cupyx.scipy.ndimage import binary_dilation, convolve, median_filter
 
 ORDER  = 5     # median filter
 FLOOR  = 0.01  # fine structure floor

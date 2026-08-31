@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-from .image   import Image
 from .cleaner import Cleaner
+from .image import Image
 
 
 def remove_cosmics(

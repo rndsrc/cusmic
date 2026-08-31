@@ -16,7 +16,7 @@
 """Re-implement the L.A.Cosmic image cleaning algorithm with CuPy"""
 
 
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 try:
     __version__ = version("cusmic")
@@ -24,8 +24,8 @@ except PackageNotFoundError:
     __version__ = "local-dev"
 
 
-from .image   import Image
+from .api import remove_cosmics
 from .cleaner import Cleaner
-from .api     import remove_cosmics
+from .image import Image
 
 __all__ = ["Image", "Cleaner", "remove_cosmics"]

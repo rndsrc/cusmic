@@ -22,7 +22,6 @@ from astropy.io import fits
 
 from . import remove_cosmics
 
-
 INPUT  = click.Path(exists=True, dir_okay=False, path_type=Path)
 OUTPUT = click.Path(dir_okay=False, path_type=Path)
 

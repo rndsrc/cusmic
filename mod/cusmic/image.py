@@ -15,7 +15,6 @@
 
 from dataclasses import dataclass
 
-import cupy as cp
 from cupy import ndarray as Array
 
 from .filters import noise_model
