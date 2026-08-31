@@ -49,14 +49,23 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
     data, header = fits.getdata(source, header=True)
     noise        = fits.getdata(error)
 
-    cleaned, _ = remove_cosmics(
+    cleaned, mask = remove_cosmics(
         cp.asarray(data),
         error=cp.asarray(noise), effective_gain=gain, readnoise=readnoise,
         contrast=contrast, cr_threshold=cr_threshold, neighbor_threshold=neighbor_threshold, maxiter=maxiter,
     )
 
-    fits.writeto(output, cp.asnumpy(cleaned), header)
-    click.echo(f"Saved {output}")
+    cleaned = cp.asnumpy(cleaned)
+    mask    = cp.asnumpy(mask).astype(np.uint8)
+
+    header.add_history("Cosmic rays removed with cusmic")
+    result = fits.HDUList([
+        fits.PrimaryHDU(cleaned, header),
+        fits.ImageHDU(mask, name="CRMASK"),
+    ])
+    result.writeto(output, checksum=True)
+
+    click.echo(f"Saved {output} ({mask.sum():,} cosmic-ray pixels)")
 
 
 if __name__ == "__main__":
