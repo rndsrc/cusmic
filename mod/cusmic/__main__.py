@@ -27,6 +27,23 @@ INPUT  = click.Path(exists=True, dir_okay=False, path_type=Path)
 OUTPUT = click.Path(dir_okay=False, path_type=Path)
 
 
+def read_image(path):
+    """Read a finite, two-dimensional FITS image in native float64 format."""
+    try:
+        data, header = fits.getdata(path, header=True)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"{path}: {exc}") from exc
+
+    if data.ndim != 2 or not data.size or data.dtype.kind not in "iuf":
+        raise click.ClickException(f"{path}: expected a nonempty 2D real image")
+
+    data = data.astype(np.float64)
+    if not np.isfinite(data).all():
+        raise click.ClickException(f"{path}: image contains nonfinite pixels")
+
+    return data, header
+
+
 @click.command()
 @click.argument("source", type=INPUT)
 @click.argument("output", type=OUTPUT)
@@ -46,12 +63,17 @@ OUTPUT = click.Path(dir_okay=False, path_type=Path)
 def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbor_threshold, maxiter):
     """Remove cosmic rays from SOURCE and write a new FITS OUTPUT."""
 
-    data, header = fits.getdata(source, header=True)
-    noise        = fits.getdata(error)
+    data, header = read_image(source)
+    data = cp.asarray(data)
+
+    noise = None
+    if error is not None:
+        noise, _ = read_image(error)
+        noise = cp.asarray(noise)
 
     cleaned, mask = remove_cosmics(
-        cp.asarray(data),
-        error=cp.asarray(noise), effective_gain=gain, readnoise=readnoise,
+        data,
+        error=noise, effective_gain=gain, readnoise=readnoise,
         contrast=contrast, cr_threshold=cr_threshold, neighbor_threshold=neighbor_threshold, maxiter=maxiter,
     )
 
