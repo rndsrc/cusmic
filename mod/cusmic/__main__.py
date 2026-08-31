@@ -63,6 +63,9 @@ def read_image(path):
 def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbor_threshold, maxiter):
     """Remove cosmic rays from SOURCE and write a new FITS OUTPUT."""
 
+    if output.exists():
+        raise click.ClickException(f"{output} already exists; choose a new output")
+
     if error is None and gain is None:
         raise click.UsageError("Provide --error or --gain (optionally --readnoise)")
     if not np.isfinite(readnoise) or (gain is not None and not np.isfinite(gain)):
@@ -94,7 +97,10 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
         fits.PrimaryHDU(cleaned, header),
         fits.ImageHDU(mask, name="CRMASK"),
     ])
-    result.writeto(output, checksum=True)
+    try:
+        result.writeto(output, checksum=True)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
     click.echo(f"Saved {output} ({mask.sum():,} cosmic-ray pixels)")
 
