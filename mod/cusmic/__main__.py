@@ -18,10 +18,9 @@ from pathlib import Path
 import click
 import cupy as cp
 import numpy as np
-from astropy.io import fits
 
 from . import remove_cosmics
-from .io import read_fits
+from .io import read_fits, write_fits
 
 INPUT  = click.Path(exists=True, dir_okay=False, path_type=Path)
 OUTPUT = click.Path(dir_okay=False, path_type=Path)
@@ -88,20 +87,13 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
         contrast=contrast, cr_threshold=cr_threshold, neighbor_threshold=neighbor_threshold, maxiter=maxiter,
     )
 
-    cleaned = cp.asnumpy(cleaned)
-    mask    = cp.asnumpy(mask).astype(np.uint8)
-
     header.add_history("Cosmic rays removed with cusmic")
-    result = fits.HDUList([
-        fits.PrimaryHDU(cleaned, header),
-        fits.ImageHDU(mask, name="CRMASK"),
-    ])
     try:
-        result.writeto(output, checksum=True)
+        write_fits(output, cleaned, mask, header=header)
     except (OSError, ValueError, TypeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(f"Saved {output} ({mask.sum():,} cosmic-ray pixels)")
+    click.echo(f"Saved {output} ({int(mask.sum()):,} cosmic-ray pixels)")
 
 
 if __name__ == "__main__":
