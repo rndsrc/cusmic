@@ -9,13 +9,17 @@ dependencies = ["cupy"]
 
 [project.optional-dependencies]
 slim = []
-cli = ["click", "numpy", "astropy"]
+cli  = ["numpy", "astropy", "click"]
+test = ["numpy", "astropy", "pytest"]
 
 [project.scripts]
 cusmic = "cusmic.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["mod"]
+
+[tool.pytest.ini_options]
+pythonpath = ["mod"]
 
 [tool.ruff]
 line-length = 79

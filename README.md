@@ -68,7 +68,7 @@ docker run --rm --gpus all -v "$PWD:/data" rndsrc/cusmic:<VERSION>-cli \
 The `slim` entrypoint is Python; `cli` runs `python -m cusmic`.
 Add `-v <CACHE>:/tmp/cupy` to reuse compiled kernels between runs.
 
-### Image size
+### Docker image size
 
 The builder prepares and trims a virtual environment, then copies it
 into a fresh Python image.
@@ -118,6 +118,33 @@ the primary HDU plus a `CRMASK` extension (1 = detected cosmic ray, 0
 Existing output files are never overwritten; choose a new filename for
 each run.
 
-[`demo/demo.ipynb`](demo/demo.ipynb) installs cusmic from GitHub and
-lacosmic from PyPI, recreates the reference image, and compares their
-cleaned images and cosmic-ray masks.
+
+## Reference results
+
+[`demo/demo.ipynb`](demo/demo.ipynb) recreates the L.A.Cosmic example,
+saves the reference FITS files, and compares cusmic with lacosmic.
+Its export cells run before the GPU comparison and overwrite files
+in `test/` relative to the notebook's working directory.
+Use `../test` if Jupyter starts in `demo/`.
+
+The committed files are `test/input.fits.gz`, `test/error.fits.gz`,
+and `test/reference.fits.gz` (cleaned pixels plus `CRMASK`).
+They contain a 512 x 512 float64 image with 200 cosmic-ray trails,
+seed 0, and the notebook's detection settings:
+contrast 1, cosmic and neighbor thresholds 5, and at most 4
+iterations.
+The reference was generated on arm64 Linux with lacosmic 1.4.0, NumPy
+2.5.3, SciPy 1.18.1, and Astropy 8.0.1.
+
+With CuPy working, install the test dependencies and run from this
+checkout:
+```sh
+python -m pip install astropy pytest
+python -m pytest -q
+```
+The optional `test` extra declares these dependencies.
+One test reads the saved files, runs cusmic, and compares the cleaned
+pixels and cosmic-ray mask exactly.
+It does not need lacosmic and skips when CuPy or CUDA is
+unavailable.
+A skip does not verify GPU agreement.
