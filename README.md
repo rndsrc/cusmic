@@ -151,6 +151,7 @@ pixels and cosmic-ray mask exactly.
 It does not need lacosmic and skips when CuPy or CUDA is
 unavailable.
 A skip does not verify GPU agreement.
+Add `--require-gpu` to fail instead of skipping when CUDA is unavailable.
 
 The optional test container runs the same required-GPU test:
 ```sh

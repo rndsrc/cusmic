@@ -16,18 +16,9 @@
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 
-def test_reference():
-    cp = pytest.importorskip("cupy")
-    try:
-        devices = cp.cuda.runtime.getDeviceCount()
-    except cp.cuda.runtime.CUDARuntimeError as exc:
-        pytest.skip(f"CUDA unavailable: {exc}")
-    if not devices:
-        pytest.skip("No CUDA GPU")
-
+def test_reference(cp):
     from cusmic import remove_cosmics
     from cusmic.io import read_fits
 
