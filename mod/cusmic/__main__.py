@@ -30,7 +30,11 @@ OUTPUT = click.Path(dir_okay=False, path_type=Path)
 @click.command()
 @click.argument("source", type=INPUT)
 @click.argument("output", type=OUTPUT)
-@click.option("--error", required=True, type=INPUT, help="FITS error (1-sigma) image.")
+@click.option("--error", type=INPUT, help="FITS error (1-sigma) image; overrides the noise model.")
+@click.option("--gain", type=click.FloatRange(min=0, min_open=True),
+              help="Gain in electrons/ADU; required without --error.")
+@click.option("--readnoise", default=0.0, type=click.FloatRange(min=0), show_default=True,
+              help="Read noise in electrons, used with --gain.")
 @click.option("--contrast", default=3.0, type=click.FloatRange(min=0), show_default=True,
               help="Minimum contrast against fine structure.")
 @click.option("--cr-threshold", default=5.0, type=click.FloatRange(min=0), show_default=True,
@@ -39,15 +43,16 @@ OUTPUT = click.Path(dir_okay=False, path_type=Path)
               help="Neighbor detection threshold in sigma.")
 @click.option("--maxiter", default=4, type=click.IntRange(min=0), show_default=True,
               help="Maximum cleaning iterations; zero copies the image.")
-def main(source, output, error, contrast, cr_threshold, neighbor_threshold, maxiter):
+def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbor_threshold, maxiter):
     """Remove cosmic rays from SOURCE and write a new FITS OUTPUT."""
 
     data, header = fits.getdata(source, header=True)
     noise        = fits.getdata(error)
 
     cleaned, _ = remove_cosmics(
-        cp.asarray(data), error=cp.asarray(noise), contrast=contrast,
-        cr_threshold=cr_threshold, neighbor_threshold=neighbor_threshold, maxiter=maxiter,
+        cp.asarray(data),
+        error=cp.asarray(noise), effective_gain=gain, readnoise=readnoise,
+        contrast=contrast, cr_threshold=cr_threshold, neighbor_threshold=neighbor_threshold, maxiter=maxiter,
     )
 
     fits.writeto(output, cp.asnumpy(cleaned), header)
