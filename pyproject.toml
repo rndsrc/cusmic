@@ -4,7 +4,10 @@ requires = ["setuptools>=80", "setuptools-scm[simple]>=8"]
 [project]
 name = "cusmic"
 dynamic = ["version"]
-dependencies = ["cupy"]
+dependencies = ["cupy", "numpy", "astropy", "click"]
+
+[project.scripts]
+cusmic = "cusmic.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["mod"]
