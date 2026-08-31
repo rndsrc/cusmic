@@ -4,6 +4,9 @@
 !*.py
 !*.ipynb
 
+!.*ignore
+!*file
+
 __pycache__/
 *.egg-info/
 .ipynb_checkpoints/

@@ -1,0 +1,7 @@
+**
+!pyproject.toml
+!README.md
+!LICENSE
+!mod/
+!mod/cusmic/
+!mod/cusmic/*.py
