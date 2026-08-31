@@ -31,6 +31,11 @@ RUN find /opt/venv -type d \( -name tests -o -name __pycache__ \) \
     find /opt/venv -type f -name '*.so*' -exec strip --strip-unneeded {} +
 RUN /opt/venv/bin/python -B -m cusmic --help
 
+#------------------------------------------------------------------------------
+FROM cli-builder AS test-builder
+RUN pip --python /opt/venv/bin/python install --no-compile 'pytest>=8.2' && \
+    find /opt/venv -type f -name '*.so*' -exec strip --strip-unneeded {} +
+
 #==============================================================================
 # Final images contain only the Python base and a prepared environment.
 FROM python:3.12-slim-trixie AS base
@@ -47,6 +52,16 @@ FROM base AS cli
 COPY --from=cli-builder /opt/venv /opt/venv
 ENTRYPOINT ["python", "-m", "cusmic"]
 CMD ["--help"]
+
+#------------------------------------------------------------------------------
+FROM base AS test
+COPY --from=test-builder /opt/venv /opt/venv
+WORKDIR /src
+COPY pyproject.toml ./
+COPY mod/cusmic/ ./mod/cusmic/
+COPY test/ ./test/
+ENTRYPOINT ["python", "-m", "pytest"]
+CMD ["-q", "-rs", "--require-gpu"]
 
 #------------------------------------------------------------------------------
 # Keep slim last so it is the default build target.

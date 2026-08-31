@@ -10,7 +10,7 @@ dependencies = ["cupy"]
 [project.optional-dependencies]
 slim = []
 cli  = ["numpy", "astropy", "click"]
-test = ["numpy", "astropy", "pytest"]
+test = ["numpy", "astropy", "click", "pytest"]
 
 [project.scripts]
 cusmic = "cusmic.__main__:main"

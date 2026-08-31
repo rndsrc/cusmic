@@ -31,6 +31,8 @@ files.
 | --- | --- | --- |
 | `slim` | cusmic, CuPy, selected CUDA components | Print cusmic version |
 | `cli`  | Core + NumPy, Astropy, and Click       | CLI help             |
+| `test` | CLI + pytest and saved references      | GPU reference test   |
+
 
 ### Build
 
@@ -38,6 +40,7 @@ From this checkout, build for x86-64 Linux:
 ```sh
 docker build --platform linux/arm64 --build-arg VERSION=<VERSION> --target slim -t rndsrc/cusmic:<VERSION>-slim .
 docker build --platform linux/arm64 --build-arg VERSION=<VERSION> --target cli  -t rndsrc/cusmic:<VERSION>-cli  .
+docker build --platform linux/arm64 --build-arg VERSION=<VERSION> --target test -t rndsrc/cusmic:<VERSION>-test .
 ```
 Omitting `--target` builds `slim`.
 Building and displaying help do not require a GPU.
@@ -148,3 +151,8 @@ pixels and cosmic-ray mask exactly.
 It does not need lacosmic and skips when CuPy or CUDA is
 unavailable.
 A skip does not verify GPU agreement.
+
+The optional test container runs the same required-GPU test:
+```sh
+docker run --rm --gpus all rndsrc/cusmic:<VERSION>-test
+```
