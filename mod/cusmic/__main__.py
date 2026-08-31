@@ -63,12 +63,21 @@ def read_image(path):
 def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbor_threshold, maxiter):
     """Remove cosmic rays from SOURCE and write a new FITS OUTPUT."""
 
+    if error is None and gain is None:
+        raise click.UsageError("Provide --error or --gain (optionally --readnoise)")
+    if not np.isfinite(readnoise) or (gain is not None and not np.isfinite(gain)):
+        raise click.UsageError("Gain and read noise must be finite")
+    if not np.isfinite([contrast, cr_threshold, neighbor_threshold]).all():
+        raise click.UsageError("Detection thresholds must be finite")
+
     data, header = read_image(source)
     data = cp.asarray(data)
 
     noise = None
     if error is not None:
         noise, _ = read_image(error)
+        if noise.shape != data.shape or (noise <= 0).any():
+            raise click.ClickException("--error must match the image shape and be positive")
         noise = cp.asarray(noise)
 
     cleaned, mask = remove_cosmics(
