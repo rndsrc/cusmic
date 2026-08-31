@@ -3,6 +3,7 @@
 
 !*.py
 !*.ipynb
+!/test/*.fits.gz
 
 !.*ignore
 !*file
