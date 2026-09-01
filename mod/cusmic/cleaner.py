@@ -59,47 +59,48 @@ class Cleaner:
             raise ValueError(f"border_mode must be one of {', '.join(modes)}")
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
-        """Return the cleaned image and the cosmic-ray mask"""
+        """Return independent arrays on the input device and its current stream"""
 
-        if self.maxiter and image.error is None and (
-            image.effective_gain is None or image.readnoise is None
-        ):
-            raise ValueError("Provide error, or both effective_gain and readnoise")
+        with image.data.device:
+            if self.maxiter and image.error is None and (
+                image.effective_gain is None or image.readnoise is None
+            ):
+                raise ValueError("Provide error, or both effective_gain and readnoise")
 
-        clean = image.data.copy()
-        crmask = cp.zeros(clean.shape, dtype=bool)
-        invalid = ~cp.isfinite(clean)
-        excluded = invalid if image.mask is None else invalid | image.mask
-        donors = ~excluded
-        cp.copyto(clean, 0, where=invalid)
-        if image.background is not None:
-            clean += image.background
-        if self.maxiter and invalid.any() and donors.any():
-            replace(clean, invalid, excluded)
+            clean = image.data.copy()
+            crmask = cp.zeros(clean.shape, dtype=bool)
+            invalid = ~cp.isfinite(clean)
+            excluded = invalid if image.mask is None else invalid | image.mask
+            donors = ~excluded
+            cp.copyto(clean, 0, where=invalid)
+            if image.background is not None:
+                clean += image.background
+            if self.maxiter and invalid.any() and donors.any():
+                replace(clean, invalid, excluded)
 
-        laplacian = mklaplacian(cp.float64, self.border_mode)
-        grow      = mkgrow()
+            laplacian = mklaplacian(cp.float64, self.border_mode)
+            grow      = mkgrow()
 
-        for i in range(self.maxiter):
-            lap   = laplacian(clean)
-            noise = image.noise(clean, mode=self.border_mode)
-            sig   = significance(lap, noise, mode=self.border_mode)
-            fine  = fine_structure(clean, noise, mode=self.border_mode)
-            cp.copyto(sig, 0, where=invalid)
+            for i in range(self.maxiter):
+                lap   = laplacian(clean)
+                noise = image.noise(clean, mode=self.border_mode)
+                sig   = significance(lap, noise, mode=self.border_mode)
+                fine  = fine_structure(clean, noise, mode=self.border_mode)
+                cp.copyto(sig, 0, where=invalid)
 
-            candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
-            candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
-            n_new = int(cp.count_nonzero(candidates & ~crmask))
+                candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
+                candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
+                n_new = int(cp.count_nonzero(candidates & ~crmask))
 
-            crmask |= candidates
+                crmask |= candidates
 
-            log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)
-            if not n_new:
-                break
+                log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)
+                if not n_new:
+                    break
 
-            replace(clean, crmask, excluded)
+                replace(clean, crmask, excluded)
 
-        if image.background is not None:
-            clean -= image.background
-        cp.copyto(clean, image.data, where=invalid)
-        return clean, crmask
+            if image.background is not None:
+                clean -= image.background
+            cp.copyto(clean, image.data, where=invalid)
+            return clean, crmask
