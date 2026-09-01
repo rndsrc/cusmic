@@ -29,9 +29,9 @@ def test_dense_patch(cp):
 
 
 def test_input_validation(cp):
-    from cusmic import Image
+    from cusmic import Cleaner, Image
 
-    for data in (cp.ones(3), cp.ones((0, 3)), cp.ones((1, 2, 3))):
+    for data in (cp.ones(3), cp.ones((0, 3)), cp.ones((1, 2, 3, 4))):
         with pytest.raises(ValueError, match="nonempty 2D"):
             Image(data)
     for dtype in ("bool", "complex128", "float32"):
@@ -45,6 +45,8 @@ def test_input_validation(cp):
                         ("readnoise", -1), ("background", np.inf)):
         with pytest.raises(ValueError, match=name):
             Image(data, **{name: cp.full_like(data, value)})
+    with pytest.raises(ValueError, match="Provide error"):
+        Cleaner()(Image(data))
 
 
 def test_cleaner_settings():

@@ -23,7 +23,7 @@ from .filters import noise_model
 
 @dataclass
 class Image:
-    """Borrowed float64 pixels and calibration validated on their device."""
+    """Borrowed float64 frame or stack and calibration validated on their device."""
 
     data:           Array
     error:          Array | None = None
@@ -37,10 +37,10 @@ class Image:
             self.data = cp.asarray(self.data)
         if self.data.dtype != cp.float64:
             raise TypeError("data must contain float64 pixels")
-        if self.data.ndim != 2 or not self.data.size:
-            raise ValueError("data must be a nonempty 2D image")
+        if self.data.ndim not in (2, 3) or not self.data.size:
+            raise ValueError("data must be a nonempty 2D frame or 3D stack")
 
-        shape = self.data.shape
+        shape, frame = self.data.shape, self.data.shape[-2:]
         fields = ("error",) if self.error is not None else ("effective_gain", "readnoise")
         with self.data.device:
             for name in (*fields, "background"):
@@ -50,7 +50,7 @@ class Image:
                 value = cp.asarray(value)
                 if value.dtype.kind not in "iuf":
                     raise TypeError(f"{name} must be real numeric data")
-                if value.shape != shape and (name == "error" or value.ndim != 0):
+                if value.shape not in (shape, frame) and (name == "error" or value.ndim != 0):
                     raise ValueError(f"{name} has an incompatible shape")
                 if not cp.isfinite(value).all():
                     raise ValueError(f"{name} must be finite")
@@ -62,8 +62,8 @@ class Image:
 
             if self.mask is not None:
                 self.mask = cp.asarray(self.mask, dtype=bool)
-                if self.mask.shape != shape:
-                    raise ValueError("mask must match the data")
+                if self.mask.shape not in (shape, frame):
+                    raise ValueError("mask must match the data or one frame")
 
     def noise(self, image=None, mode=None):
         """Given errors, else the noise model evaluated on the working image."""

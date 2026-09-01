@@ -21,14 +21,15 @@ BUDGET = 1 << 18  # Gathered values per batch; at least one window is needed.
 
 def local_median(clean, donors, targets, offsets):
     """Median of each clipped window; also report which windows have donors."""
-    ny, nx = clean.shape
-    y,  x  = targets.T
+    ny, nx = clean.shape[-2:]
+    *f, y, x = targets.T[:, :, None]
     dy, dx = offsets
-    yy, xx = y[:, None] + dy, x[:, None] + dx
+    yy, xx = y + dy, x + dx
     inside = (yy >= 0) & (yy < ny) & (xx >= 0) & (xx < nx)
     yy, xx = yy.clip(0, ny-1), xx.clip(0, nx-1)
-    valid  = inside & donors[yy, xx]
-    values = cp.where(valid, clean[yy, xx], clean.dtype.type(cp.inf))
+    at = (*f, yy, xx)
+    valid  = inside & donors[at]
+    values = cp.where(valid, clean[at], clean.dtype.type(cp.inf))
     values.sort(axis=1)  # Donors first, ascending; the +inf padding sorts last.
     count = cp.count_nonzero(valid, axis=1)
     rows  = cp.arange(len(count))
@@ -42,9 +43,10 @@ def replace(clean, crmask, excluded):
     if not len(targets):
         return clean
     donors = ~crmask & cp.logical_not(excluded) & cp.isfinite(clean)
-    if not donors.any():
+    available = donors.any(axis=(-2, -1))
+    if not (available[targets[:, 0]].all() if clean.ndim == 3 else available):
         raise ValueError("no finite replacement donors")
-    ny, nx = clean.shape
+    ny, nx = clean.shape[-2:]
     for r in range(RADIUS, max(RADIUS, ny - 1, nx - 1) + 1):
         if not len(targets):
             break

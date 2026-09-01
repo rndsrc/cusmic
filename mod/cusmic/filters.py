@@ -21,7 +21,7 @@ FLOOR  = 0.01  # fine structure floor
 NOISE  = 1e-5  # median floor in the noise model (eq 10)
 
 
-def mklaplacian(dtype, mode):
+def mklaplacian(dtype, mode, ndim=2):
 
     # Discrete Laplacian for the 2x2-replicated image (paper eq 4);
     # the paper's factor 1/4 is supplied by the flux-conserving
@@ -30,26 +30,27 @@ def mklaplacian(dtype, mode):
         [ 0,-1, 0],
         [-1, 4,-1],
         [ 0,-1, 0],
-    ], dtype=dtype)
+    ], dtype=dtype).reshape((1,) * (ndim - 2) + (3, 3))
 
     def laplacian(image):  # closure on kernel and mode
-        ny, nx = image.shape
-        sampled = cp.empty((ny, 2, nx, 2), dtype=dtype)
-        cp.divide(image[:, None, :, None], 4, out=sampled)
-        sampled = sampled.reshape(2 * ny, 2 * nx)
+        ny, nx = image.shape[-2:]
+        shape = image.shape[:-2]
+        sampled = cp.empty((*shape, ny, 2, nx, 2), dtype=dtype)
+        cp.divide(image[..., :, None, :, None], 4, out=sampled)
+        sampled = sampled.reshape(*shape, 2 * ny, 2 * nx)
         lap2    = convolve(sampled, kernel, mode=mode)
         cp.maximum(lap2, 0, out=lap2)
 
         # Sum each 2x2 block as (a + b) + (c + d), order matters
-        a, b = lap2[0::2, 0::2], lap2[0::2, 1::2]
-        c, d = lap2[1::2, 0::2], lap2[1::2, 1::2]
-        return ((a + b) + c) + d if image.shape[1] == 1 else (a + b) + (c + d)
+        a, b = lap2[..., 0::2, 0::2], lap2[..., 0::2, 1::2]
+        c, d = lap2[..., 1::2, 0::2], lap2[..., 1::2, 1::2]
+        return ((a + b) + c) + d if nx == 1 else (a + b) + (c + d)
 
     return laplacian
 
 
-def mkgrow():
-    structure = cp.ones((3, 3), dtype=bool)
+def mkgrow(ndim=2):
+    structure = cp.ones((1,) * (ndim - 2) + (3, 3), dtype=bool)
 
     def grow(candidates, sig, cr_threshold, neighbor_threshold):
         """Grow at cosmic then neighbor thresholds; input exclusions apply to seeds."""
@@ -60,22 +61,27 @@ def mkgrow():
     return grow
 
 
+def median(image, size, mode):
+    """Filter spatial axes only; frames never share pixels."""
+    return median_filter(image, size=(1,) * (image.ndim - 2) + (size, size), mode=mode)
+
+
 def noise_model(clean, gain, readnoise, mode):
     """Poisson and read noise from the 5x5 median (eq 10)"""
-    median = cp.maximum(median_filter(clean, size=ORDER, mode=mode), NOISE)
-    return cp.sqrt(readnoise*readnoise + gain*median) / gain
+    m = cp.maximum(median(clean, ORDER, mode), NOISE)
+    return cp.sqrt(readnoise*readnoise + gain*m) / gain
 
 
 def significance(lap, noise, mode):
     """Remove smooth structure from Laplacian significance (eqs 11, 13)"""
     S = lap / (2 * noise)
-    return S - median_filter(S, size=ORDER, mode=mode)
+    return S - median(S, ORDER, mode)
 
 
 def fine_structure(clean, noise, mode):
     """Noise-normalized fine structure for star rejection (eq 14)"""
-    m = median_filter(clean, size=ORDER-2, mode=mode)
-    F = m - median_filter(m, size=ORDER+2, mode=mode)
+    m = median(clean, ORDER-2, mode)
+    F = m - median(m, ORDER+2, mode)
     return cp.maximum(F / noise, FLOOR)
 
 

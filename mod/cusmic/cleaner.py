@@ -76,10 +76,11 @@ class Cleaner:
             if image.background is not None:
                 clean += image.background
             if self.maxiter and invalid.any() and donors.any():
-                replace(clean, invalid, excluded)
+                targets = invalid & donors.any(axis=(-2, -1), keepdims=True)
+                replace(clean, targets, excluded)
 
-            laplacian = mklaplacian(cp.float64, self.border_mode)
-            grow      = mkgrow()
+            laplacian = mklaplacian(cp.float64, self.border_mode, clean.ndim)
+            grow      = mkgrow(clean.ndim)
 
             for i in range(self.maxiter):
                 lap   = laplacian(clean)
