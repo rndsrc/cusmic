@@ -1,71 +1,96 @@
 # Install dependencies before copying source so code edits reuse this layer.
-FROM python:3.12-slim-trixie AS slim-builder
+FROM python:3.13-slim-trixie AS api-builder
+
+ARG VERSION
+
+ARG CUPY=14.2.0
+ARG CUDA=13
+ARG TK12=12.9.1
+ARG TK13=13.0.2
 
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN apt-get update && apt-get install -y --no-install-recommends binutils
 RUN python -m venv --without-pip /opt/venv
-RUN pip --python /opt/venv/bin/python install --no-compile \
-    cupy-cuda12x==14.2.0 'cuda-toolkit[cudart,nvrtc,cccl]==12.9.1'
+RUN case "$CUDA" in \
+        12) TK="$TK12" ;; \
+        13) TK="$TK13" ;; \
+        *) echo "CUDA must be 12 or 13" >&2; exit 1 ;; \
+    esac && \
+    pip --python /opt/venv/bin/python install --no-compile --only-binary=:all: \
+        "cupy-cuda${CUDA}x==${CUPY}" "cuda-toolkit[cudart,nvrtc,cccl]==${TK}"
 
-# Keep runtime headers and the standard NVRTC compiler with its builtins.
-RUN rm -f /opt/venv/lib/python*/site-packages/nvidia/cuda_nvrtc/lib/*.alt.so.* && \
+# Keep NVRTC, its builtins and headers for kernel compilation.
+# Stripping wheel-vendored libraries can break their ELF alignment.
+RUN find /opt/venv -type f \( -name 'libnvrtc.alt.so*' -o -name '*.a' \) -delete && \
     find /opt/venv -type d \( -name tests -o -name __pycache__ \) -prune -exec rm -rf {} + && \
-    find /opt/venv -type f -name '*.so*' -exec strip --strip-unneeded {} + &&\
-    find /opt/venv -type f -name '*.a'   -delete
+    find /opt/venv -type f -name '*.so*' ! -path '*.libs/*' -exec strip --strip-unneeded {} +
 
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY mod/cusmic/ ./mod/cusmic/
-ARG VERSION
 RUN SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CUSMIC="$VERSION" \
     pip wheel --no-deps --wheel-dir /wheels .
-# CuPy is already installed as cupy-cuda12x; do not also resolve the cupy package.
+# Use the installed CUDA-specific CuPy wheel, not the source-only cupy package.
 RUN pip --python /opt/venv/bin/python install --no-deps --no-compile /wheels/*.whl
 
 #------------------------------------------------------------------------------
-FROM slim-builder AS cli-builder
-RUN pip --python /opt/venv/bin/python install --no-compile --only-binary=:all: numpy astropy click
-# Astropy imports its own test runner at startup; keep that directory.
-RUN find /opt/venv -type d \( -name tests -o -name __pycache__ \) \
+FROM api-builder AS cli-builder
+
+RUN pip --python /opt/venv/bin/python install --prefix /opt/cli --no-compile --only-binary=:all: astropy click
+# Astropy imports its test runner at startup.
+RUN find /opt/cli -type d \( -name tests -o -name __pycache__ \) \
         ! -path '*/astropy/tests' -prune -exec rm -rf {} + && \
-    find /opt/venv -type f -name '*.so*' -exec strip --strip-unneeded {} +
-RUN /opt/venv/bin/python -B -m cusmic --help
+    find /opt/cli -type f -name '*.so*' ! -path '*.libs/*' -exec strip --strip-unneeded {} +
 
 #------------------------------------------------------------------------------
-FROM cli-builder AS test-builder
-RUN pip --python /opt/venv/bin/python install --no-compile 'pytest>=8.2' && \
-    find /opt/venv -type f -name '*.so*' -exec strip --strip-unneeded {} +
+FROM cli-builder AS full-builder
+
+ENV PYTHONPATH=/opt/cli/lib/python3.13/site-packages
+RUN pip --python /opt/venv/bin/python install --prefix /opt/full --no-compile --only-binary=:all: \
+    'pytest>=8.2' 'lacosmic==1.4.0' matplotlib jupyterlab
+# Let ipykernel select the runtime interpreter instead of the builder's venv.
+RUN rm -rf /opt/full/share/jupyter/kernels
 
 #==============================================================================
-# Final images contain only the Python base and a prepared environment.
-FROM python:3.12-slim-trixie AS base
+# Only Python and the prepared packages enter the runtime images.
+FROM gcr.io/distroless/python3-debian13:latest AS runtime
 
-ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONDONTWRITEBYTECODE=1 \
+ENV PYTHONDONTWRITEBYTECODE=1 \
     CUPY_CACHE_DIR=/tmp/cupy \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
+COPY --from=api-builder /opt/venv/lib/python3.13/site-packages /usr/local/lib/python3.13/dist-packages
 
 WORKDIR /data
 
+ENTRYPOINT ["/usr/bin/python3"]
+CMD ["-c", "import cusmic; print('cusmic', cusmic.__version__)"]
+
 #------------------------------------------------------------------------------
-FROM base AS cli
-COPY --from=cli-builder /opt/venv /opt/venv
-ENTRYPOINT ["python", "-m", "cusmic"]
+FROM runtime AS cli
+
+COPY --from=cli-builder /opt/cli/lib/python3.13/site-packages /usr/local/lib/python3.13/dist-packages
+
+RUN ["/usr/bin/python3", "-m", "cusmic", "--help"]
+
+ENTRYPOINT ["/usr/bin/python3", "-m", "cusmic"]
 CMD ["--help"]
 
 #------------------------------------------------------------------------------
-FROM base AS test
-COPY --from=test-builder /opt/venv /opt/venv
+FROM cli AS full
+
+COPY --from=full-builder /opt/full/lib/python3.13/site-packages /usr/local/lib/python3.13/dist-packages
+COPY --from=full-builder /opt/full/share/jupyter /usr/share/jupyter
+COPY --from=full-builder /opt/full/etc/jupyter /etc/jupyter
+
 WORKDIR /src
-COPY pyproject.toml ./
-COPY mod/cusmic/ ./mod/cusmic/
+COPY pyproject.toml README.md LICENSE ./
 COPY test/ ./test/
-ENTRYPOINT ["python", "-m", "pytest"]
-CMD ["-q", "-rs", "--require-gpu"]
+COPY bench/ ./bench/
+COPY demo/ ./demo/
+
+ENTRYPOINT ["/usr/bin/python3"]
+CMD ["-m", "pytest", "-q", "-rs", "--require-gpu", "-p", "no:cacheprovider"]
 
 #------------------------------------------------------------------------------
-# Keep slim last so it is the default build target.
-FROM base AS slim
-COPY --from=slim-builder /opt/venv /opt/venv
-ENTRYPOINT ["python"]
-CMD ["-c", "import cusmic; print('cusmic', cusmic.__version__)"]
+# Keep the API image last so it is the default build target.
+FROM runtime AS api
