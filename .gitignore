@@ -3,15 +3,16 @@
 
 !*.py
 !*.ipynb
-!/test/*.fits.gz
 
 !.*ignore
 !*file
 
+!README.md
+!bench/README.md
+!test/README.md
+!test/data/*.fits.gz
+
 __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
-
 .ruff_cache/
-build/
-dist/
