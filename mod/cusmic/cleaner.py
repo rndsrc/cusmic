@@ -15,6 +15,8 @@
 
 import logging
 from dataclasses import dataclass
+from math import isfinite
+from numbers import Integral, Real
 
 import cupy as cp
 
@@ -25,7 +27,7 @@ from .replace import replace
 log = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Cleaner:
     """Reusable detection settings"""
 
@@ -34,6 +36,27 @@ class Cleaner:
     neighbor_threshold: float = 3
     maxiter:            int   = 4
     border_mode:        str   = "mirror"
+
+    def __post_init__(self):
+        for name in ("contrast", "cr_threshold", "neighbor_threshold"):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not isfinite(value)
+                or value < 0
+            ):
+                raise ValueError(f"{name} must be finite and nonnegative")
+
+        if (
+            isinstance(self.maxiter, bool)
+            or not isinstance(self.maxiter, Integral)
+            or self.maxiter < 0
+        ):
+            raise ValueError("maxiter must be a nonnegative integer")
+        modes = ("mirror", "reflect", "nearest", "wrap", "constant")
+        if not isinstance(self.border_mode, str) or self.border_mode not in modes:
+            raise ValueError(f"border_mode must be one of {', '.join(modes)}")
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
         """Return the cleaned image and the cosmic-ray mask"""

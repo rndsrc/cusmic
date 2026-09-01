@@ -45,3 +45,14 @@ def test_input_validation(cp):
                         ("readnoise", -1), ("background", np.inf)):
         with pytest.raises(ValueError, match=name):
             Image(data, **{name: cp.full_like(data, value)})
+
+
+def test_cleaner_settings():
+    pytest.importorskip("cupy")
+    from cusmic import Cleaner
+
+    for settings in ({"contrast": -1}, {"cr_threshold": np.nan},
+                     {"neighbor_threshold": np.inf}, {"maxiter": 1.5},
+                     {"maxiter": True}, {"maxiter": -1}, {"border_mode": "invalid"}):
+        with pytest.raises(ValueError):
+            Cleaner(**settings)
