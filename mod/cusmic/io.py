@@ -31,7 +31,11 @@ def read_fits(path, dtype=None, *, ext=None):
 
 def write_fits(path, data, mask=None, *, header=None, overwrite=False):
     """Write pixels and an optional CRMASK; refuse overwrites by default."""
-    hdus = [fits.PrimaryHDU(cp.asnumpy(data), header)]
+    pixels = cp.asnumpy(data)
+    header = header.copy() if header is not None else None
+    if header is not None and pixels.dtype.kind == "f":
+        header.pop("BLANK", None)
+    hdus = [fits.PrimaryHDU(pixels, header)]
     if mask is not None:
         hdus.append(fits.ImageHDU(cp.asnumpy(mask).astype("uint8"), name="CRMASK"))
     fits.HDUList(hdus).writeto(path, checksum=True, overwrite=overwrite)

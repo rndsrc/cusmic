@@ -51,6 +51,8 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
 
     try:
         data, header = read_fits(source, dtype="float64")
+        if data.ndim != 2:
+            raise ValueError("The FITS command expects one 2D image")
         noise = read_fits(error, dtype="float64")[0] if error else None
         cleaned, mask = remove_cosmics(
             data, error=noise, effective_gain=gain, readnoise=readnoise,
@@ -59,7 +61,7 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
         )
         header.add_history("Cosmic rays removed with cusmic")
         write_fits(output, cleaned, mask, header=header)
-    except (OSError, ValueError, TypeError) as exc:
+    except (OSError, ValueError, TypeError, IndexError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(f"Saved {output} ({int(mask.sum()):,} cosmic-ray pixels)")
