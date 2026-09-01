@@ -2,6 +2,8 @@
 
 import json
 import os
+import platform
+import subprocess
 from pathlib import Path
 from time import perf_counter
 
@@ -10,6 +12,24 @@ import cupy as cp
 import numpy as np
 from cusmic import Cleaner, Image, __version__
 from cusmic.io import read_fits
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "test/data"
+
+
+def source_info():
+    revision = os.environ.get("CUSMIC_REVISION", "unknown")
+    dirty = None
+    if (ROOT / ".git").exists():
+        try:
+            revision = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+            dirty = bool(subprocess.check_output(
+                ["git", "status", "--porcelain", "--untracked-files=no"],
+                cwd=ROOT, text=True))
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    return dict(source_revision=revision, source_dirty=dirty)
 
 
 def timed(call):
@@ -58,13 +78,16 @@ def benchmark(data, error, settings, repeats=15, warmups=5):
     device = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
     record = dict(
         host_memory="pageable", allocation="ordinary calls",
-        source_revision=os.environ.get("CUSMIC_REVISION", "unknown"),
+        **source_info(),
+        python=platform.python_version(), numpy=np.__version__,
+        system=platform.platform(), cpu=platform.machine(),
         kernel_cache_existed=cache_existed,
         stopping="convergence or maxiter", detected_pixels=int(first[1].sum()),
         backend="cupy", shape=list(data.shape), dtype=str(data.dtype), settings=settings,
         warmups=warmups, repeats=repeats, first_result_ms=first_ms,
-        milliseconds={name: dict(median=float(np.median(times)), minimum=min(times), maximum=max(times))
+        milliseconds={name: dict(median=float(np.median(times)), minimum=min(times), maximum=max(times), samples=times)
                       for name, times in samples.items()},
+        frames_per_second=1000 * (len(data) if data.ndim == 3 else 1) / np.median(samples["total_ms"]),
         cusmic=__version__, cupy=cp.__version__, gpu=device["name"].decode(),
         cuda_runtime=cp.cuda.runtime.runtimeGetVersion(),
         cuda_driver=cp.cuda.runtime.driverGetVersion(),
@@ -73,13 +96,14 @@ def benchmark(data, error, settings, repeats=15, warmups=5):
 
 
 @click.command()
-@click.option("--input", "path", default="test/input.fits.gz", type=click.Path(exists=True))
-@click.option("--error", default="test/error.fits.gz", type=click.Path(exists=True))
-@click.option("--reference", default="test/reference.fits.gz", type=click.Path(exists=True))
+@click.option("--input", "path", default=str(DATA / "input.fits.gz"), type=click.Path(exists=True))
+@click.option("--error", default=str(DATA / "error.fits.gz"), type=click.Path(exists=True))
+@click.option("--reference", default=str(DATA / "reference.fits.gz"), type=click.Path(exists=True))
 @click.option("--frames", default=1, type=click.IntRange(min=1))
 @click.option("--repeats", default=15, type=click.IntRange(min=1), show_default=True)
 @click.option("--warmups", default=5, type=click.IntRange(min=1), show_default=True)
-def main(path, error, reference, frames, repeats, warmups):
+@click.option("--output", type=click.Path(path_type=Path), help="Append a JSON record to this file.")
+def main(path, error, reference, frames, repeats, warmups, output):
     """Benchmark the saved L.A.Cosmic example; disk I/O is outside warmed timings."""
     data, _ = read_fits(path, dtype="float64")
     noise, _ = read_fits(error, dtype="float64")
@@ -93,7 +117,12 @@ def main(path, error, reference, frames, repeats, warmups):
     expected_mask = np.broadcast_to(expected_mask, mask.shape)
     np.testing.assert_array_equal(cleaned.view("uint64"), expected.view("uint64"))
     np.testing.assert_array_equal(mask, expected_mask)
-    print(json.dumps(dict(record, input=str(Path(path)), reference_exact=True)))
+    line = json.dumps(dict(record, input=str(Path(path)), reference_exact=True))
+    print(line)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("a") as stream:
+            stream.write(line + "\n")
 
 
 if __name__ == "__main__":
