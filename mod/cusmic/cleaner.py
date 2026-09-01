@@ -93,4 +93,4 @@ class Cleaner:
 
         if image.background is not None:
             clean -= image.background
-        return cp.where(crmask, clean, image.data), crmask
+        return clean, crmask

@@ -56,3 +56,13 @@ def test_cleaner_settings():
                      {"maxiter": True}, {"maxiter": -1}, {"border_mode": "invalid"}):
         with pytest.raises(ValueError):
             Cleaner(**settings)
+
+
+def test_zero_iterations_background(cp):
+    from cusmic import remove_cosmics
+
+    image = cp.full((3, 3), 0.1)
+    cleaned, mask = remove_cosmics(image, background=1e12, maxiter=0)
+    expected = (np.full((3, 3), 0.1) + 1e12) - 1e12
+    np.testing.assert_array_equal(cp.asnumpy(cleaned).view("uint64"), expected.view("uint64"))
+    assert not mask.any()
