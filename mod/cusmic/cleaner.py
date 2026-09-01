@@ -68,19 +68,24 @@ class Cleaner:
 
         clean = image.data.copy()
         crmask = cp.zeros(clean.shape, dtype=bool)
+        invalid = ~cp.isfinite(clean)
+        excluded = invalid if image.mask is None else invalid | image.mask
+        donors = ~excluded
+        cp.copyto(clean, 0, where=invalid)
         if image.background is not None:
             clean += image.background
+        if self.maxiter and invalid.any() and donors.any():
+            clean = replace(clean, invalid, excluded)
 
         laplacian = mklaplacian(cp.float64, self.border_mode)
         grow      = mkgrow()
-        excluded = False if image.mask is None else image.mask
-        donors = cp.logical_not(excluded)
 
         for i in range(self.maxiter):
             lap   = laplacian(clean)
             noise = image.noise(clean, mode=self.border_mode)
             sig   = significance(lap, noise, mode=self.border_mode)
             fine  = fine_structure(clean, noise, mode=self.border_mode)
+            cp.copyto(sig, 0, where=invalid)
 
             candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
             candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
@@ -99,4 +104,5 @@ class Cleaner:
 
         if image.background is not None:
             clean -= image.background
+        cp.copyto(clean, image.data, where=invalid)
         return clean, crmask

@@ -43,8 +43,6 @@ class Image:
         shape = self.data.shape
         fields = ("error",) if self.error is not None else ("effective_gain", "readnoise")
         with self.data.device:
-            if not cp.isfinite(self.data).all():
-                raise ValueError("data must be finite")
             for name in (*fields, "background"):
                 value = getattr(self, name)
                 if value is None:

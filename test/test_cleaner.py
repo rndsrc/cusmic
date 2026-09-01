@@ -66,3 +66,46 @@ def test_zero_iterations_background(cp):
     expected = (np.full((3, 3), 0.1) + 1e12) - 1e12
     np.testing.assert_array_equal(cp.asnumpy(cleaned).view("uint64"), expected.view("uint64"))
     assert not mask.any()
+
+
+def test_nonfinite_pixels(cp):
+    from cusmic import remove_cosmics
+
+    data = np.full((9, 9), 10.0)
+    data[2:7, 2:7] = np.nan
+    data[3, 3], data[3, 5], data[4, 4] = np.inf, -np.inf, 1000
+    data.view("uint64")[2, 2] = 0x7ff8000000000001  # Preserve NaN payloads too.
+    original = data.copy()
+    for maxiter in (0, 4):
+        clean, mask = remove_cosmics(data, error=np.ones_like(data),
+                                      background=100, maxiter=maxiter)
+        expected = data.copy()
+        if maxiter:
+            expected[4, 4] = 10
+        np.testing.assert_array_equal(cp.asnumpy(clean).view("uint64"), expected.view("uint64"))
+        assert cp.asnumpy(mask).sum() == bool(maxiter)
+        np.testing.assert_array_equal(data.view("uint64"), original.view("uint64"))
+    data[:] = np.nan
+    clean, mask = remove_cosmics(data, error=np.ones_like(data))
+    np.testing.assert_array_equal(cp.asnumpy(clean).view("uint64"), data.view("uint64"))
+    assert not cp.asnumpy(mask).any()
+
+
+def test_independent_calls(cp):
+    from cusmic import Cleaner, Image
+
+    cleaner = Cleaner()
+    def clean_image(data, **kwargs):
+        return cleaner(Image(data, **kwargs))
+    xp = cp
+    results = []
+    for shape in ((9, 9), (7, 11)):
+        data, error = xp.full(shape, 10.0), xp.ones(shape)
+        data[3, 3] = 1000
+        original = cp.asnumpy(data).copy()
+        results.append(clean_image(data, error=error))
+        np.testing.assert_array_equal(cp.asnumpy(data), original)
+        np.testing.assert_array_equal(cp.asnumpy(error), 1)
+    for cleaned, mask in results:
+        np.testing.assert_array_equal(cp.asnumpy(cleaned), 10)
+        assert cp.asnumpy(mask).sum() == 1
