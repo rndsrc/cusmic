@@ -16,13 +16,16 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.e2e
 
 
 def test_reference(cp):
     from cusmic import remove_cosmics
     from cusmic.io import read_fits
 
-    root = Path(__file__).parent
+    root = Path(__file__).parent / "data"
     image, _ = read_fits(root / "input.fits.gz")
     error, _ = read_fits(root / "error.fits.gz")
     expected, _ = read_fits(root / "reference.fits.gz")
@@ -41,7 +44,7 @@ def test_cupy_cli_validation(cp, tmp_path):
     from cusmic.__main__ import main
     from cusmic.io import read_fits
 
-    source = Path(__file__).with_name("input.fits.gz")
+    source = Path(__file__).parent / "data/input.fits.gz"
     output = tmp_path / "copy.fits"
     args = [str(source), str(output), "--maxiter", "0"]
     result = CliRunner().invoke(main, args)

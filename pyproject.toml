@@ -10,7 +10,8 @@ dependencies = ["cupy"]
 [project.optional-dependencies]
 slim = []
 cli  = ["numpy", "astropy", "click"]
-test = ["numpy", "astropy", "click", "pytest"]
+test = ["numpy", "astropy", "click", "pytest>=8.2", "lacosmic==1.4.0"]
+demo = ["numpy", "astropy", "click", "matplotlib", "jupyterlab"]
 
 [project.scripts]
 cusmic = "cusmic.__main__:main"
@@ -20,6 +21,8 @@ where = ["mod"]
 
 [tool.pytest.ini_options]
 pythonpath = ["mod"]
+testpaths = ["test"]
+markers = ["e2e: compare the public API and CLI against the saved reference"]
 
 [tool.ruff]
 line-length = 79
