@@ -32,5 +32,5 @@ def test_reference(cp):
         cp.asarray(image), error=cp.asarray(error),
         contrast=1, cr_threshold=5, neighbor_threshold=5, maxiter=4,
     )
-    np.testing.assert_array_equal(cp.asnumpy(cleaned), expected)
+    np.testing.assert_array_equal(cp.asnumpy(cleaned).view("uint64"), expected.view("uint64"))
     np.testing.assert_array_equal(cp.asnumpy(mask), expected_mask)

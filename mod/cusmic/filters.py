@@ -40,7 +40,7 @@ def mklaplacian(dtype, mode):
         # Sum each 2x2 block as (a + b) + (c + d), order matters
         a, b = lap2[0::2, 0::2], lap2[0::2, 1::2]
         c, d = lap2[1::2, 0::2], lap2[1::2, 1::2]
-        return (a + b) + (c + d)
+        return ((a + b) + c) + d if image.shape[1] == 1 else (a + b) + (c + d)
 
     return laplacian
 

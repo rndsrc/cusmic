@@ -33,7 +33,7 @@ def local_median(clean, donors, targets, offsets):
     count = cp.count_nonzero(valid, axis=1)
     rows  = cp.arange(len(count))
     low, high = values[rows, (count-1)//2], values[rows, count//2]
-    return cp.where(count%2, low, (low+high)/2), count > 0
+    return cp.where(count%2, 0.0+low, ((0.0+low)+high)/2), count > 0
 
 
 def expanded_median(clean, donors, y, x):
@@ -48,13 +48,13 @@ def expanded_median(clean, donors, y, x):
         if values.size:
             values.sort()
             n = values.size
-            return values[n//2] if n%2 else (values[n//2-1]+values[n//2])/2
+            return 0.0+values[n//2] if n%2 else ((0.0+values[n//2-1])+values[n//2])/2
 
 
 def replace(clean, crmask, excluded):
     """Replace flagged pixels using fixed donors and expanding 5x5 windows."""
     allowed = cp.logical_not(excluded)
-    donors  = ~crmask & allowed
+    donors  = ~crmask & allowed & cp.isfinite(clean)
     targets = cp.argwhere(crmask)
     cleaned = clean.copy()
     ry, rx  = (min(RADIUS, n-1) for n in clean.shape)

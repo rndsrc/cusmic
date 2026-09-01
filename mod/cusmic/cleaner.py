@@ -61,16 +61,15 @@ class Cleaner:
     def __call__(self, image: Image) -> tuple[Array, Array]:
         """Return the cleaned image and the cosmic-ray mask"""
 
-        laplacian = mklaplacian(image.data.dtype, self.border_mode)
-        grow      = mkgrow()
-
-        clean = cp.where(cp.isfinite(image.data), image.data, 0)
+        clean  = image.data.copy()
+        crmask = cp.zeros(clean.shape, dtype=bool)
         if image.background is not None:
             clean += image.background
 
-        excluded = False if image.mask is None else image.mask
-        donors = cp.logical_not(excluded)
-        crmask  = cp.zeros(image.data.shape, dtype=bool)
+        laplacian = mklaplacian(cp.float64, self.border_mode)
+        grow      = mkgrow()
+        excluded  = False if image.mask is None else image.mask
+        donors    = cp.logical_not(excluded)
 
         for i in range(self.maxiter):
             lap   = laplacian(clean)
@@ -80,14 +79,16 @@ class Cleaner:
 
             candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
             candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
-            n_new = int(cp.count_nonzero(candidates & ~crmask))
+            n_new      = int(cp.count_nonzero(candidates & ~crmask))
 
-            crmask |= candidates
-            n_donors = int(cp.count_nonzero(donors & ~crmask))
+            crmask  |= candidates
+            n_donors = int(cp.count_nonzero(donors & ~crmask & cp.isfinite(clean)))
 
             log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)
-            if not n_new or not n_donors:
+            if not n_new:
                 break
+            if not n_donors:
+                raise ValueError("no finite replacement donors")
 
             clean = replace(clean, crmask, excluded)
 
