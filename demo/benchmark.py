@@ -76,16 +76,21 @@ def benchmark(data, error, settings, repeats=15, warmups=5):
 @click.option("--input", "path", default="test/input.fits.gz", type=click.Path(exists=True))
 @click.option("--error", default="test/error.fits.gz", type=click.Path(exists=True))
 @click.option("--reference", default="test/reference.fits.gz", type=click.Path(exists=True))
+@click.option("--frames", default=1, type=click.IntRange(min=1))
 @click.option("--repeats", default=15, type=click.IntRange(min=1), show_default=True)
 @click.option("--warmups", default=5, type=click.IntRange(min=1), show_default=True)
-def main(path, error, reference, repeats, warmups):
+def main(path, error, reference, frames, repeats, warmups):
     """Benchmark the saved L.A.Cosmic example; disk I/O is outside warmed timings."""
     data, _ = read_fits(path, dtype="float64")
     noise, _ = read_fits(error, dtype="float64")
+    if frames > 1:
+        data = np.repeat(data[None], frames, axis=0)
     settings = dict(contrast=1, cr_threshold=5, neighbor_threshold=5, maxiter=4)
     record, (cleaned, mask) = benchmark(data, noise, settings, repeats, warmups)
     expected, _ = read_fits(reference, dtype="float64")
     expected_mask, _ = read_fits(reference, ext="CRMASK")
+    expected = np.broadcast_to(expected, cleaned.shape)
+    expected_mask = np.broadcast_to(expected_mask, mask.shape)
     np.testing.assert_array_equal(cleaned.view("uint64"), expected.view("uint64"))
     np.testing.assert_array_equal(mask, expected_mask)
     print(json.dumps(dict(record, input=str(Path(path)), reference_exact=True)))
