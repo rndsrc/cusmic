@@ -34,3 +34,23 @@ def test_reference(cp):
     )
     np.testing.assert_array_equal(cp.asnumpy(cleaned).view("uint64"), expected.view("uint64"))
     np.testing.assert_array_equal(cp.asnumpy(mask), expected_mask)
+
+
+def test_cupy_cli_validation(cp, tmp_path):
+    from click.testing import CliRunner
+    from cusmic.__main__ import main
+    from cusmic.io import read_fits
+
+    source = Path(__file__).with_name("input.fits.gz")
+    output = tmp_path / "copy.fits"
+    args = [str(source), str(output), "--maxiter", "0"]
+    result = CliRunner().invoke(main, args)
+    assert result.exit_code == 0, result.output
+    np.testing.assert_array_equal(read_fits(output)[0].view("uint64"),
+                                  read_fits(source)[0].view("uint64"))
+    assert not read_fits(output, ext="CRMASK")[0].any()
+    assert CliRunner().invoke(main, args).exit_code != 0
+    output = tmp_path / "invalid.fits"
+    for options in (["--gain", "1", "--contrast", "nan"], ["--readnoise", "1"]):
+        result = CliRunner().invoke(main, [str(source), str(output), *options])
+        assert result.exit_code != 0 and not output.exists()

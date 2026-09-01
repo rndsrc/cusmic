@@ -61,15 +61,20 @@ class Cleaner:
     def __call__(self, image: Image) -> tuple[Array, Array]:
         """Return the cleaned image and the cosmic-ray mask"""
 
-        clean  = image.data.copy()
+        if self.maxiter and image.error is None and (
+            image.effective_gain is None or image.readnoise is None
+        ):
+            raise ValueError("Provide error, or both effective_gain and readnoise")
+
+        clean = image.data.copy()
         crmask = cp.zeros(clean.shape, dtype=bool)
         if image.background is not None:
             clean += image.background
 
         laplacian = mklaplacian(cp.float64, self.border_mode)
         grow      = mkgrow()
-        excluded  = False if image.mask is None else image.mask
-        donors    = cp.logical_not(excluded)
+        excluded = False if image.mask is None else image.mask
+        donors = cp.logical_not(excluded)
 
         for i in range(self.maxiter):
             lap   = laplacian(clean)
@@ -79,9 +84,9 @@ class Cleaner:
 
             candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
             candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
-            n_new      = int(cp.count_nonzero(candidates & ~crmask))
+            n_new = int(cp.count_nonzero(candidates & ~crmask))
 
-            crmask  |= candidates
+            crmask |= candidates
             n_donors = int(cp.count_nonzero(donors & ~crmask & cp.isfinite(clean)))
 
             log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)

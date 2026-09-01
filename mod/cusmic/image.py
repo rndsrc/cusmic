@@ -39,12 +39,12 @@ class Image:
             raise TypeError("data must contain float64 pixels")
         if self.data.ndim != 2 or not self.data.size:
             raise ValueError("data must be a nonempty 2D image")
-        if not cp.isfinite(self.data).all():
-            raise ValueError("data must be finite")
 
         shape = self.data.shape
         fields = ("error",) if self.error is not None else ("effective_gain", "readnoise")
         with self.data.device:
+            if not cp.isfinite(self.data).all():
+                raise ValueError("data must be finite")
             for name in (*fields, "background"):
                 value = getattr(self, name)
                 if value is None:
@@ -71,6 +71,4 @@ class Image:
         """Given errors, else the noise model evaluated on the working image."""
         if self.error is not None:
             return self.error
-        if self.effective_gain is None or self.readnoise is None:
-            raise ValueError("Provide error, or both effective_gain and readnoise")
         return noise_model(image, self.effective_gain, self.readnoise, mode)

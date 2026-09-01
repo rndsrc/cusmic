@@ -16,30 +16,12 @@
 from pathlib import Path
 
 import click
-import cupy as cp
-import numpy as np
 
 from . import remove_cosmics
 from .io import read_fits, write_fits
 
 INPUT  = click.Path(exists=True, dir_okay=False, path_type=Path)
 OUTPUT = click.Path(dir_okay=False, path_type=Path)
-
-
-def read_image(path):
-    """Read a finite, two-dimensional FITS image in native float64 format."""
-    try:
-        data, header = read_fits(path, dtype="float64")
-    except (OSError, ValueError, TypeError) as exc:
-        raise click.ClickException(f"{path}: {exc}") from exc
-
-    if data.ndim != 2 or not data.size:
-        raise click.ClickException(f"{path}: expected a nonempty 2D real image")
-
-    if not np.isfinite(data).all():
-        raise click.ClickException(f"{path}: image contains nonfinite pixels")
-
-    return data, header
 
 
 @click.command()
@@ -64,31 +46,18 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
     if output.exists():
         raise click.ClickException(f"{output} already exists; choose a new output")
 
-    if error is None and gain is None:
+    if maxiter and error is None and gain is None:
         raise click.UsageError("Provide --error or --gain (optionally --readnoise)")
-    if not np.isfinite(readnoise) or (gain is not None and not np.isfinite(gain)):
-        raise click.UsageError("Gain and read noise must be finite")
-    if not np.isfinite([contrast, cr_threshold, neighbor_threshold]).all():
-        raise click.UsageError("Detection thresholds must be finite")
 
-    data, header = read_image(source)
-    data = cp.asarray(data)
-
-    noise = None
-    if error is not None:
-        noise, _ = read_image(error)
-        if noise.shape != data.shape or (noise <= 0).any():
-            raise click.ClickException("--error must match the image shape and be positive")
-        noise = cp.asarray(noise)
-
-    cleaned, mask = remove_cosmics(
-        data,
-        error=noise, effective_gain=gain, readnoise=readnoise,
-        contrast=contrast, cr_threshold=cr_threshold, neighbor_threshold=neighbor_threshold, maxiter=maxiter,
-    )
-
-    header.add_history("Cosmic rays removed with cusmic")
     try:
+        data, header = read_fits(source, dtype="float64")
+        noise = read_fits(error, dtype="float64")[0] if error else None
+        cleaned, mask = remove_cosmics(
+            data, error=noise, effective_gain=gain, readnoise=readnoise,
+            contrast=contrast, cr_threshold=cr_threshold,
+            neighbor_threshold=neighbor_threshold, maxiter=maxiter,
+        )
+        header.add_history("Cosmic rays removed with cusmic")
         write_fits(output, cleaned, mask, header=header)
     except (OSError, ValueError, TypeError) as exc:
         raise click.ClickException(str(exc)) from exc
