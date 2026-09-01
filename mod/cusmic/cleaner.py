@@ -45,7 +45,8 @@ class Cleaner:
         if image.background is not None:
             clean += image.background
 
-        allowed = cp.logical_not(0 if image.mask is None else image.mask)
+        excluded = False if image.mask is None else image.mask
+        donors = cp.logical_not(excluded)
         crmask  = cp.zeros(image.data.shape, dtype=bool)
 
         for i in range(self.maxiter):
@@ -54,18 +55,18 @@ class Cleaner:
             sig   = significance(lap, noise, mode=self.border_mode)
             fine  = fine_structure(clean, noise, mode=self.border_mode)
 
-            candidates = detect(sig, fine, allowed, self.contrast, self.cr_threshold)
-            candidates = grow(candidates, sig, allowed, self.cr_threshold, self.neighbor_threshold)
-            new = int(cp.count_nonzero(candidates & ~crmask))
+            candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
+            candidates = grow(candidates, sig, donors, self.cr_threshold, self.neighbor_threshold)
+            n_new = int(cp.count_nonzero(candidates & ~crmask))
 
             crmask |= candidates
-            donors = int(cp.count_nonzero(allowed & ~crmask))
+            n_donors = int(cp.count_nonzero(donors & ~crmask))
 
-            log.info("Iteration %d: %d new cosmic-ray pixels", i+1, new)
-            if not new or not donors:
+            log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)
+            if not n_new or not n_donors:
                 break
 
-            clean = replace(clean, crmask, 0 if image.mask is None else image.mask)
+            clean = replace(clean, crmask, excluded)
 
         if image.background is not None:
             clean -= image.background

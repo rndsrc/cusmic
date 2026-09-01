@@ -49,7 +49,7 @@ def mkgrow():
     structure = cp.ones((3, 3), dtype=bool)
 
     def grow(candidates, sig, allowed, cr_threshold, neighbor_threshold):
-        """Grow at the cosmic threshold, then at the neighbor threshold."""
+        """Grow at cosmic then neighbor thresholds; input exclusions apply to seeds."""
         for threshold in (cr_threshold, neighbor_threshold):
             candidates = binary_dilation(candidates, structure) & (sig > threshold) & allowed
         return candidates
@@ -76,6 +76,6 @@ def fine_structure(clean, noise, mode):
     return cp.maximum(F / noise, FLOOR)
 
 
-def detect(sig, fine, allowed, contrast, cr_threshold):
+def detect(sig, fine, excluded, contrast, cr_threshold):
     """Select significant pixels with sufficient Laplacian contrast."""
-    return (sig > cr_threshold) & (sig / fine > contrast) & allowed
+    return (sig > cr_threshold) & (sig / fine > contrast) & cp.logical_not(excluded)

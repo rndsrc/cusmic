@@ -51,11 +51,11 @@ def expanded_median(clean, donors, y, x):
             return values[n//2] if n%2 else (values[n//2-1]+values[n//2])/2
 
 
-def replace(clean, cosmic_mask, mask):
+def replace(clean, crmask, excluded):
     """Replace flagged pixels using fixed donors and expanding 5x5 windows."""
-    allowed = cp.logical_not(mask)
-    donors  = ~cosmic_mask & allowed
-    targets = cp.argwhere(cosmic_mask & allowed)
+    allowed = cp.logical_not(excluded)
+    donors  = ~crmask & allowed
+    targets = cp.argwhere(crmask & allowed)
     cleaned = clean.copy()
     ry, rx  = (min(RADIUS, n-1) for n in clean.shape)
     offsets = cp.mgrid[-ry:ry+1, -rx:rx+1].reshape(2, -1)
