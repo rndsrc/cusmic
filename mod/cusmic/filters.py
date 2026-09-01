@@ -33,7 +33,10 @@ def mklaplacian(dtype, mode):
     ], dtype=dtype)
 
     def laplacian(image):  # closure on kernel and mode
-        sampled = (image/4).repeat(2, axis=0).repeat(2, axis=1)
+        ny, nx = image.shape
+        sampled = cp.empty((ny, 2, nx, 2), dtype=dtype)
+        cp.divide(image[:, None, :, None], 4, out=sampled)
+        sampled = sampled.reshape(2 * ny, 2 * nx)
         lap2    = convolve(sampled, kernel, mode=mode)
         cp.maximum(lap2, 0, out=lap2)
 
