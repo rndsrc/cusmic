@@ -55,7 +55,7 @@ def replace(clean, crmask, excluded):
     """Replace flagged pixels using fixed donors and expanding 5x5 windows."""
     allowed = cp.logical_not(excluded)
     donors  = ~crmask & allowed
-    targets = cp.argwhere(crmask & allowed)
+    targets = cp.argwhere(crmask)
     cleaned = clean.copy()
     ry, rx  = (min(RADIUS, n-1) for n in clean.shape)
     offsets = cp.mgrid[-ry:ry+1, -rx:rx+1].reshape(2, -1)

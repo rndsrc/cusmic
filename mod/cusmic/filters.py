@@ -48,10 +48,10 @@ def mklaplacian(dtype, mode):
 def mkgrow():
     structure = cp.ones((3, 3), dtype=bool)
 
-    def grow(candidates, sig, allowed, cr_threshold, neighbor_threshold):
+    def grow(candidates, sig, cr_threshold, neighbor_threshold):
         """Grow at cosmic then neighbor thresholds; input exclusions apply to seeds."""
         for threshold in (cr_threshold, neighbor_threshold):
-            candidates = binary_dilation(candidates, structure) & (sig > threshold) & allowed
+            candidates = binary_dilation(candidates, structure) & (sig > threshold)
         return candidates
 
     return grow

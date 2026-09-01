@@ -79,7 +79,7 @@ class Cleaner:
             fine  = fine_structure(clean, noise, mode=self.border_mode)
 
             candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
-            candidates = grow(candidates, sig, donors, self.cr_threshold, self.neighbor_threshold)
+            candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
             n_new = int(cp.count_nonzero(candidates & ~crmask))
 
             crmask |= candidates
