@@ -109,3 +109,15 @@ def test_independent_calls(cp):
     for cleaned, mask in results:
         np.testing.assert_array_equal(cp.asnumpy(cleaned), 10)
         assert cp.asnumpy(mask).sum() == 1
+
+
+def test_replacement_batches(cp, monkeypatch):
+    from cusmic.replace import replace
+
+    monkeypatch.setattr("cusmic.replace.BUDGET", 1)
+    data = cp.asarray([[0.0, 1000, 1000, 1000, 1000, 1000, 60]])
+    targets = data == 1000
+    cleaned = replace(data, targets, False)
+    assert cleaned is data
+    np.testing.assert_array_equal(cp.asnumpy(cleaned), [[0, 0, 0, 30, 60, 60, 60]])
+    assert replace(data, cp.zeros(data.shape, dtype=bool), False) is data

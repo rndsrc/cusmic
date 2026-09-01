@@ -75,7 +75,7 @@ class Cleaner:
         if image.background is not None:
             clean += image.background
         if self.maxiter and invalid.any() and donors.any():
-            clean = replace(clean, invalid, excluded)
+            replace(clean, invalid, excluded)
 
         laplacian = mklaplacian(cp.float64, self.border_mode)
         grow      = mkgrow()
@@ -92,15 +92,12 @@ class Cleaner:
             n_new = int(cp.count_nonzero(candidates & ~crmask))
 
             crmask |= candidates
-            n_donors = int(cp.count_nonzero(donors & ~crmask & cp.isfinite(clean)))
 
             log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)
             if not n_new:
                 break
-            if not n_donors:
-                raise ValueError("no finite replacement donors")
 
-            clean = replace(clean, crmask, excluded)
+            replace(clean, crmask, excluded)
 
         if image.background is not None:
             clean -= image.background

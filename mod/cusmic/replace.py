@@ -16,7 +16,7 @@
 import cupy as cp
 
 RADIUS = 2     # replacement window is 5x5 (paper sec 3.1)
-BATCH  = 8192  # replacement gathers at most BATCH x 25 values at a time
+BUDGET = 1 << 18  # Gathered values per batch; at least one window is needed.
 
 
 def local_median(clean, donors, targets, offsets):
@@ -36,34 +36,26 @@ def local_median(clean, donors, targets, offsets):
     return cp.where(count%2, 0.0+low, ((0.0+low)+high)/2), count > 0
 
 
-def expanded_median(clean, donors, y, x):
-    """Expand from radius 3 until a donor is found."""
-    ny, nx = clean.shape
-    for r in range(RADIUS+1, max(ny, nx)+1):
-        window = (
-            slice(max(0, y-r), min(ny, y+r+1)),
-            slice(max(0, x-r), min(nx, x+r+1)),
-        )
-        values = clean[window][donors[window]]
-        if values.size:
-            values.sort()
-            n = values.size
-            return 0.0+values[n//2] if n%2 else ((0.0+values[n//2-1])+values[n//2])/2
-
-
 def replace(clean, crmask, excluded):
-    """Replace flagged pixels using fixed donors and expanding 5x5 windows."""
-    allowed = cp.logical_not(excluded)
-    donors  = ~crmask & allowed & cp.isfinite(clean)
+    """Fill targets in place from fixed donors in expanding 5x5 windows."""
     targets = cp.argwhere(crmask)
-    cleaned = clean.copy()
-    ry, rx  = (min(RADIUS, n-1) for n in clean.shape)
-    offsets = cp.mgrid[-ry:ry+1, -rx:rx+1].reshape(2, -1)
-    for start in range(0, len(targets), BATCH):
-        batch = targets[start:start+BATCH]
-        y, x = batch.T
-        median, found = local_median(clean, donors, batch, offsets)
-        cleaned[y, x] = cp.where(found, median, clean[y, x])
-        for row, column in cp.asnumpy(batch[~found]).tolist():
-            cleaned[row, column] = expanded_median(clean, donors, row, column)
-    return cleaned
+    if not len(targets):
+        return clean
+    donors = ~crmask & cp.logical_not(excluded) & cp.isfinite(clean)
+    if not donors.any():
+        raise ValueError("no finite replacement donors")
+    ny, nx = clean.shape
+    for r in range(RADIUS, max(RADIUS, ny - 1, nx - 1) + 1):
+        if not len(targets):
+            break
+        ry, rx = min(r, ny - 1), min(r, nx - 1)
+        offsets = cp.mgrid[-ry:ry+1, -rx:rx+1].reshape(2, -1)
+        batch = max(1, BUDGET // offsets.shape[1])
+        pending = []
+        for i in range(0, len(targets), batch):
+            at = targets[i:i+batch]
+            median, found = local_median(clean, donors, at, offsets)
+            clean[tuple(at[found].T)] = median[found]
+            pending.append(at[~found])
+        targets = cp.concatenate(pending)
+    return clean
