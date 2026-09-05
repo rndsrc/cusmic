@@ -38,3 +38,33 @@ IMAGE = rndsrc/$(if $(filter full,$(TARGET)),cusmic,cupysmic):$(TAG)
 image:
 	docker buildx build --load --platform $(PLATFORM) --target $(TARGET) \
 	    --build-arg VERSION=$(VERSION) --build-arg CUDA=$(CUDA) -t $(IMAGE) .
+
+# CUDA keeps each float64 operation in reference order.
+BUILD ?= build/cuda
+CUDA_PATH ?= /usr/local/cuda
+NVCC ?= $(CUDA_PATH)/bin/nvcc
+CUDA_ARCH ?= 75
+NVCCFLAGS ?= -O2
+REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+CUDA_HEADERS = $(wildcard src/*.h src/*.cuh)
+CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
+    -gencode arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" \
+    -Xcompiler=-fPIC,-Wall,-Wextra,-Werror,-ffp-contract=off \
+    -DCUSMIC_VERSION='"$(VERSION)"'
+
+.DELETE_ON_ERROR:
+.PHONY: cuda
+cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a
+
+$(BUILD):
+	mkdir -p $@
+
+$(BUILD)/api.o: src/api.cu $(CUDA_HEADERS) Makefile | $(BUILD)
+	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc -c $< -o $@
+
+$(BUILD)/libcusmic.so: $(BUILD)/api.o
+	$(NVCC) --shared --cudart=static $< -o $@
+	strip --strip-unneeded $@
+
+$(BUILD)/libcusmic.a: $(BUILD)/api.o
+	$(AR) rcs $@ $<
