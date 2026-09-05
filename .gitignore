@@ -16,3 +16,12 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 .ruff_cache/
+
+!*.h*
+!*.c*
+!*.sh
+!.clang-format
+build/
+dist/
+
+/bin/
