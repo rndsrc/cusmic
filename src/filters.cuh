@@ -107,3 +107,60 @@ laplacian(const double *clean, double *lap, int w, int h, int mode)
 	/* The reference sums singleton-width columns from left to right. */
 	lap[i] = w == 1 ? ((a + b) + c) + d : (a + b) + (c + d);
 }
+
+static __global__ void
+noise_model(const double *med5, const cusmic_image *ims, double g, double rn, double *noise, int n)
+{
+	med5 = frame(med5, n);
+	noise = frame(noise, n);
+	const auto &im = ims[blockIdx.y];
+	if (im.error)
+		return;
+	const double *gain = im.gain, *readnoise = im.readnoise;
+	int i = pixel_index();
+	if (i >= n)
+		return;
+	g = gain ? gain[i] : g;
+	rn = readnoise ? readnoise[i] : rn;
+	double m = med5[i] < SIGNAL_FLOOR ? SIGNAL_FLOOR : med5[i];
+	noise[i] = sqrt(rn * rn + g * m) / g;
+}
+
+static __global__ void
+snr(const double *lap, const cusmic_image *ims, const double *noise, double *sig, int n)
+{
+	lap = frame(lap, n);
+	sig = frame(sig, n);
+	const auto &im = ims[blockIdx.y];
+	noise = im.error ? im.error : frame(noise, n);
+	int i = pixel_index();
+	if (i < n)
+		sig[i] = lap[i] / (2 * noise[i]);
+}
+
+static __global__ void
+significance(const double *med5, const cusmic_image *ims, double *sig, int n)
+{
+	med5 = frame(med5, n);
+	sig = frame(sig, n);
+	const double *data = ims[blockIdx.y].data;
+	int i = pixel_index();
+	if (i < n)
+		sig[i] = isfinite(data[i]) ? sig[i] - med5[i] : 0;
+}
+
+static __global__ void
+fine_structure(const double *med3, const double *med7, const cusmic_image *ims, const double *noise,
+	double *fine, int n)
+{
+	med3 = frame(med3, n);
+	med7 = frame(med7, n);
+	fine = frame(fine, n);
+	const auto &im = ims[blockIdx.y];
+	noise = im.error ? im.error : frame(noise, n);
+	int i = pixel_index();
+	if (i < n) {
+		double v = (med3[i] - med7[i]) / noise[i];
+		fine[i] = v < FINE_FLOOR ? FINE_FLOOR : v;
+	}
+}
