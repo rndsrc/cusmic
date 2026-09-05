@@ -99,3 +99,47 @@ select_donor(const double *clean, const uint8_t *crmask, const uint8_t *excluded
 	}
 	return value(prefix);
 }
+
+/* Only targets are written; every donor remains unchanged for this launch. */
+static __global__ void
+replace(double *clean, const uint8_t *crmask, const uint8_t *excluded, const counts *count, int w,
+	int h)
+{
+	if (!count[blockIdx.y].donors)
+		return;
+	clean = frame(clean, w * h);
+	crmask = frame(crmask, w * h);
+	excluded = frame(excluded, w * h);
+	int i = blockIdx.x * (blockDim.x / 32) + threadIdx.x / 32;
+	int lane = threadIdx.x & 31;
+	if (i >= w * h || !crmask[i])
+		return;
+	for (int r = 2; r <= max(w, h); ++r) {
+		window win = region(i % w, i / w, r, w, h);
+		int ww = win.x1 - win.x0 + 1, area = ww * (win.y1 - win.y0 + 1);
+		double v = INFINITY;
+		int n = 0;
+		for (int pos = lane; pos < area; pos += 32) {
+			int j = (win.y0 + pos / ww) * w + win.x0 + pos % ww;
+			if (is_donor(clean, crmask, excluded, j)) {
+				v = clean[j];
+				++n;
+			}
+		}
+		n = warp_sum(n);
+		if (!n)
+			continue;
+		double lo, hi;
+		if (area <= 32) {
+			v = sort_warp(v);
+			lo = __shfl_sync(0xffffffff, v, (n - 1) / 2);
+			hi = __shfl_sync(0xffffffff, v, n / 2);
+		} else {
+			lo = select_donor(clean, crmask, excluded, win, w, (n - 1) / 2);
+			hi = n % 2 ? lo : select_donor(clean, crmask, excluded, win, w, n / 2);
+		}
+		if (!lane)
+			clean[i] = n % 2 ? 0.0 + lo : ((0.0 + lo) + hi) / 2;
+		return;
+	}
+}
