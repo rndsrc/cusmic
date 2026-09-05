@@ -61,3 +61,39 @@ close_fits(struct fits_image *im)
 	free(im->data);
 	*im = (struct fits_image){0};
 }
+
+int
+write_fits(const char *path, const struct fits_image *im, const double *clean, const uint8_t *mask)
+{
+	fitsfile *out = NULL;
+	int status = 0, close_status = 0;
+	long axes[] = {im->axes[0], im->axes[1]}, n = axes[0] * axes[1];
+	const char *keys[] = {"BSCALE", "BZERO", "BLANK"};
+
+	/* Use literal disk paths; never accept CFITSIO's overwrite prefix. */
+	if (!path[0] || path[0] == '!')
+		return FILE_NOT_CREATED;
+	fits_create_diskfile(&out, path, &status);
+	if (status)
+		return status;
+	fits_copy_header(im->file, out, &status);
+	fits_resize_img(out, DOUBLE_IMG, 2, axes, &status);
+	for (unsigned i = 0; i < sizeof(keys) / sizeof(keys[0]) && !status; ++i) {
+		fits_delete_key(out, keys[i], &status);
+		if (status == KEY_NO_EXIST)
+			status = 0;
+	}
+	fits_set_bscale(out, 1, 0, &status);
+	fits_write_img(out, TDOUBLE, 1, n, (void *)clean, &status);
+	fits_write_history(out, "Cosmic rays removed with cusmic", &status);
+	fits_write_chksum(out, &status);
+	fits_create_img(out, BYTE_IMG, 2, axes, &status);
+	fits_update_key(out, TSTRING, "EXTNAME", "CRMASK", NULL, &status);
+	fits_write_img(out, TBYTE, 1, n, (void *)mask, &status);
+	fits_write_chksum(out, &status);
+	if (status)
+		fits_delete_file(out, &close_status);
+	else
+		fits_close_file(out, &close_status);
+	return status ? status : close_status;
+}
