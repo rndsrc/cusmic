@@ -55,7 +55,7 @@ CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
 
 .DELETE_ON_ERROR:
 .PHONY: cuda
-cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a $(BIN)/cusmic
+cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a $(BIN)/cudasmic
 
 $(BUILD):
 	mkdir -p $@
@@ -82,7 +82,7 @@ $(BUILD)/io.o: src/io.c src/io.h Makefile | $(BUILD)
 $(BIN):
 	mkdir -p $@
 
-$(BIN)/cusmic: src/main.c src/cusmic.h src/io.h $(BUILD)/io.o $(BUILD)/libcusmic.so | $(BIN)
+$(BIN)/cudasmic: src/main.c src/cusmic.h src/io.h $(BUILD)/io.o $(BUILD)/libcusmic.so | $(BIN)
 	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< $(BUILD)/io.o \
 	    -L$(BUILD) -lcusmic $(FITS_LIBS) -lm -Wl,-rpath,'$$ORIGIN/../$(BUILD)' -o $@
 	strip --strip-unneeded $@

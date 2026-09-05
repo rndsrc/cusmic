@@ -14,7 +14,7 @@ test = ["numpy", "astropy", "click", "pytest>=8.2", "lacosmic==1.4.0"]
 demo = ["numpy", "astropy", "click", "matplotlib", "jupyterlab"]
 
 [project.scripts]
-cusmic = "cusmic.__main__:main"
+cupysmic = "cusmic.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["mod"]
