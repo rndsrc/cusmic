@@ -26,7 +26,7 @@
 static void
 help(void)
 {
-	puts("Usage: cusmic SOURCE OUTPUT [OPTIONS]\n"
+	puts("Usage: cudasmic SOURCE OUTPUT [OPTIONS]\n"
 	     "  --error FILE             Positive 1-sigma errors; overrides "
 	     "gain/read noise\n"
 	     "  --gain NUMBER            Electrons/ADU; required without "
@@ -150,7 +150,7 @@ main(int argc, char **argv)
 	im.width = (size_t)input.axes[0];
 	im.height = (size_t)input.axes[1];
 	if (remove_cosmics(&im, &o, clean, mask, msg, sizeof(msg))) {
-		fprintf(stderr, "cusmic: %s\n", msg);
+		fprintf(stderr, "cudasmic: %s\n", msg);
 		goto out;
 	}
 	status = write_fits(output_path, &input, clean, mask);

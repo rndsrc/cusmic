@@ -43,6 +43,8 @@ OUTPUT = click.Path(dir_okay=False, path_type=Path)
 def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbor_threshold, maxiter):
     """Remove cosmic rays from SOURCE and write a new FITS OUTPUT."""
 
+    if str(output).startswith("!"):
+        raise click.ClickException("Choose a new output filename")
     if output.exists():
         raise click.ClickException(f"{output} already exists; choose a new output")
 
@@ -64,7 +66,7 @@ def main(source, output, error, gain, readnoise, contrast, cr_threshold, neighbo
     except (OSError, ValueError, TypeError, IndexError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(f"Saved {output} ({int(mask.sum()):,} cosmic-ray pixels)")
+    click.echo(f"Saved {output} ({int(mask.sum())} cosmic-ray pixels)")
 
 
 if __name__ == "__main__":
