@@ -68,3 +68,42 @@ median(const double *a, double *out, int w, int h, int mode)
 	sort_window(values);
 	out[i] = values[size * size / 2];
 }
+
+static __device__ double
+supersample(const double *clean, int x, int y, int w, int h, int mode)
+{
+	x = border_index(x, 2 * w, mode);
+	y = border_index(y, 2 * h, mode);
+	return x < 0 || y < 0 ? 0 : clean[(y / 2) * w + x / 2] / 4;
+}
+
+/* Sample the replicated image without storing it; retain each rounded
+ * operation. */
+static __device__ double
+laplacian_at(const double *clean, int x, int y, int w, int h, int mode)
+{
+	double v = 0;
+	v -= supersample(clean, x, y - 1, w, h, mode);
+	v -= supersample(clean, x - 1, y, w, h, mode);
+	v += 4 * supersample(clean, x, y, w, h, mode);
+	v -= supersample(clean, x + 1, y, w, h, mode);
+	v -= supersample(clean, x, y + 1, w, h, mode);
+	return v < 0 ? 0 : v;
+}
+
+static __global__ void
+laplacian(const double *clean, double *lap, int w, int h, int mode)
+{
+	clean = frame(clean, w * h);
+	lap = frame(lap, w * h);
+	int i = pixel_index();
+	if (i >= w * h)
+		return;
+	int x = 2 * (i % w), y = 2 * (i / w);
+	double a = laplacian_at(clean, x, y, w, h, mode);
+	double b = laplacian_at(clean, x + 1, y, w, h, mode);
+	double c = laplacian_at(clean, x, y + 1, w, h, mode);
+	double d = laplacian_at(clean, x + 1, y + 1, w, h, mode);
+	/* The reference sums singleton-width columns from left to right. */
+	lap[i] = w == 1 ? ((a + b) + c) + d : (a + b) + (c + d);
+}
