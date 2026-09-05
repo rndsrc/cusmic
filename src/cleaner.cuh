@@ -139,3 +139,42 @@ update_mask(scratch &s, cudaStream_t stream)
 	}
 	return changed;
 }
+
+inline void
+clean_images(const cusmic_image *ims, size_t nf, const cusmic_options &o, double *output,
+	uint8_t *mask, cudaStream_t stream)
+{
+	bool model = false, has_bg = !std::isnan(o.background);
+	for (size_t f = 0; f < nf; ++f) {
+		model |= !ims[f].error;
+		has_bg |= ims[f].background != nullptr;
+	}
+	scratch s(ims[0].width, ims[0].height, nf, model);
+	cuda_check(cudaMemcpyAsync(
+		s.input.data, ims, nf * sizeof(*ims), cudaMemcpyHostToDevice, stream));
+	clear_counts(s, stream);
+	prepare_image<<<s.grid, s.block, 0, stream>>>(
+		s.input.data, s.clean, s.crmask, s.excluded, s.dcount.data, s.n);
+	if (has_bg)
+		background<<<s.grid, s.block, 0, stream>>>(
+			s.clean, s.input.data, o.background, 1, s.n);
+	read_counts(s, stream);
+	fill_holes(s, o, has_bg, stream);
+	cuda_check(cudaMemsetAsync(s.crmask, 0, s.total, stream));
+
+	for (int i = 0; i < o.maxiter; ++i) {
+		find_cosmics(s, o, stream);
+		if (!update_mask(s, stream))
+			break;
+		replace<<<s.replace_grid, s.block, 0, stream>>>(
+			s.clean, s.crmask, s.excluded, s.dcount.data, s.w, s.h);
+	}
+
+	if (has_bg)
+		background<<<s.grid, s.block, 0, stream>>>(
+			s.clean, s.input.data, o.background, -1, s.n);
+	restore_image<<<s.grid, s.block, 0, stream>>>(
+		s.clean, s.crmask, s.input.data, output, mask, s.n);
+	cuda_check(cudaGetLastError());
+	cuda_check(cudaStreamSynchronize(stream));
+}
