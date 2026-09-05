@@ -41,6 +41,7 @@ image:
 
 # CUDA keeps each float64 operation in reference order.
 BUILD ?= build/cuda
+BIN ?= bin
 CUDA_PATH ?= /usr/local/cuda
 NVCC ?= $(CUDA_PATH)/bin/nvcc
 CUDA_ARCH ?= 75
@@ -54,7 +55,7 @@ CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
 
 .DELETE_ON_ERROR:
 .PHONY: cuda
-cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a
+cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a $(BIN)/cusmic
 
 $(BUILD):
 	mkdir -p $@
@@ -68,3 +69,20 @@ $(BUILD)/libcusmic.so: $(BUILD)/api.o
 
 $(BUILD)/libcusmic.a: $(BUILD)/api.o
 	$(AR) rcs $@ $<
+
+# CFITSIO is used by the command, not the cleaning library.
+CFLAGS ?= -O2
+FITS_CFLAGS ?=
+FITS_LIBS ?= -lcfitsio
+WARN = -Wall -Wextra -Werror
+
+$(BUILD)/io.o: src/io.c src/io.h Makefile | $(BUILD)
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc -c $< -o $@
+
+$(BIN):
+	mkdir -p $@
+
+$(BIN)/cusmic: src/main.c src/cusmic.h src/io.h $(BUILD)/io.o $(BUILD)/libcusmic.so | $(BIN)
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< $(BUILD)/io.o \
+	    -L$(BUILD) -lcusmic $(FITS_LIBS) -lm -Wl,-rpath,'$$ORIGIN/../$(BUILD)' -o $@
+	strip --strip-unneeded $@
