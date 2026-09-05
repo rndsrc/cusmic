@@ -164,3 +164,34 @@ fine_structure(const double *med3, const double *med7, const cusmic_image *ims, 
 		fine[i] = v < FINE_FLOOR ? FINE_FLOOR : v;
 	}
 }
+
+static __global__ void
+detect(const double *sig, const double *fine, const uint8_t *excluded, uint8_t *cand,
+	double contrast, double threshold, int n)
+{
+	sig = frame(sig, n);
+	fine = frame(fine, n);
+	excluded = frame(excluded, n);
+	cand = frame(cand, n);
+	int i = pixel_index();
+	if (i < n)
+		cand[i] = !excluded[i] && sig[i] > threshold && sig[i] / fine[i] > contrast;
+}
+
+static __global__ void
+grow(const uint8_t *in, const double *sig, uint8_t *out, double threshold, int w, int h)
+{
+	in = frame(in, w * h);
+	sig = frame(sig, w * h);
+	out = frame(out, w * h);
+	int i = pixel_index();
+	if (i >= w * h)
+		return;
+	out[i] = 0;
+	if (!(sig[i] > threshold))
+		return;
+	int x = i % w, y = i / w;
+	for (int yy = max(0, y - 1); yy <= min(h - 1, y + 1); ++yy)
+		for (int xx = max(0, x - 1); xx <= min(w - 1, x + 1); ++xx)
+			out[i] |= in[yy * w + xx] != 0;
+}
