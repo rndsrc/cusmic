@@ -73,3 +73,69 @@ read_counts(scratch &s, cudaStream_t stream)
 		cudaMemcpyDeviceToHost, stream));
 	cuda_check(cudaStreamSynchronize(stream));
 }
+
+inline void
+fill_holes(scratch &s, const cusmic_options &o, bool has_bg, cudaStream_t stream)
+{
+	bool fill = false;
+	for (const auto &c : s.hcount)
+		fill |= c.todo && c.donors;
+	if (!o.maxiter || !fill)
+		return;
+
+	/* Background addition can overflow otherwise valid donors. */
+	if (has_bg) {
+		auto before = s.hcount;
+		clear_counts(s, stream);
+		accumulate<<<s.grid, s.block, 0, stream>>>(
+			s.clean, s.crmask, s.crmask, s.excluded, s.dcount.data, s.n);
+		read_counts(s, stream);
+		for (size_t f = 0; f < s.hcount.size(); ++f)
+			if (before[f].todo && before[f].donors && !s.hcount[f].donors)
+				throw std::invalid_argument("no finite replacement donors");
+	}
+	replace<<<s.replace_grid, s.block, 0, stream>>>(
+		s.clean, s.crmask, s.excluded, s.dcount.data, s.w, s.h);
+}
+
+inline void
+find_cosmics(scratch &s, const cusmic_options &o, cudaStream_t stream)
+{
+	laplacian<<<s.grid, s.block, 0, stream>>>(s.clean, s.lap, s.w, s.h, o.border);
+	if (s.noise) {
+		median<5><<<s.grid, s.block, 0, stream>>>(s.clean, s.tmp, s.w, s.h, o.border);
+		noise_model<<<s.grid, s.block, 0, stream>>>(
+			s.tmp, s.input.data, o.gain, o.readnoise, s.noise, s.n);
+	}
+
+	snr<<<s.grid, s.block, 0, stream>>>(s.lap, s.input.data, s.noise, s.sig, s.n);
+	median<5><<<s.grid, s.block, 0, stream>>>(s.sig, s.tmp, s.w, s.h, o.border);
+	significance<<<s.grid, s.block, 0, stream>>>(s.tmp, s.input.data, s.sig, s.n);
+
+	median<3><<<s.grid, s.block, 0, stream>>>(s.clean, s.med3, s.w, s.h, o.border);
+	median<7><<<s.grid, s.block, 0, stream>>>(s.med3, s.med7, s.w, s.h, o.border);
+	fine_structure<<<s.grid, s.block, 0, stream>>>(
+		s.med3, s.med7, s.input.data, s.noise, s.fine, s.n);
+
+	detect<<<s.grid, s.block, 0, stream>>>(
+		s.sig, s.fine, s.excluded, s.cand, o.contrast, o.cr_threshold, s.n);
+	grow<<<s.grid, s.block, 0, stream>>>(s.cand, s.sig, s.grown, o.cr_threshold, s.w, s.h);
+	grow<<<s.grid, s.block, 0, stream>>>(
+		s.grown, s.sig, s.cand, o.neighbor_threshold, s.w, s.h);
+}
+
+inline bool
+update_mask(scratch &s, cudaStream_t stream)
+{
+	clear_counts(s, stream);
+	accumulate<<<s.grid, s.block, 0, stream>>>(
+		s.clean, s.cand, s.crmask, s.excluded, s.dcount.data, s.n);
+	read_counts(s, stream);
+	bool changed = false;
+	for (const auto &c : s.hcount) {
+		if (c.todo && !c.donors)
+			throw std::invalid_argument("no finite replacement donors");
+		changed |= c.todo != 0;
+	}
+	return changed;
+}
