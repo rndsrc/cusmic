@@ -109,3 +109,10 @@ $(BUILD)/test_batch: test/test_batch.cu src/cusmic.h $(CUDA_HEADERS) \
     $(BUILD)/libcusmic.so
 	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc $< -L$(BUILD) -lcusmic \
 	    -Xlinker=-rpath,'$$ORIGIN' -o $@
+
+# The CUDA benchmark uses the same FITS scene and timing fields as bench.py.
+$(BUILD)/bench: bench/bench.cu src/cusmic.h src/io.h $(CUDA_HEADERS) \
+    $(BUILD)/io.o $(BUILD)/libcusmic.so
+	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc $(FITS_CFLAGS) $< \
+	    $(BUILD)/io.o -L$(BUILD) -lcusmic $(FITS_LIBS) \
+	    -Xlinker=-rpath,'$$ORIGIN' -o $@
