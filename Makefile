@@ -6,9 +6,11 @@ BENCH_ARGS ?=
 REFDIR ?= test/data
 BUILD ?= build/cuda
 GPU_REQUIRED ?= 0
+CHECK_PREBUILT ?= 0
 
 export PYTHONPATH := $(CURDIR)/mod:$(PYTHONPATH)
 export GPU_REQUIRED
+export CHECK_PREBUILT
 
 .PHONY: build check lint unit-test e2e-test unit e2e test mkref bench
 
@@ -34,7 +36,7 @@ test: check
 mkref:
 	$(PYTHON) test/mkref.py $(REFDIR)
 
-bench: $(BUILD)/bench
+bench: $(if $(filter 1,$(CHECK_PREBUILT)),,$(BUILD)/bench)
 	$(PYTHON) -m bench.run $(BENCH_ARGS)
 
 VERSION ?= $(patsubst v%,%,$(GIT_TAG))
