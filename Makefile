@@ -30,14 +30,11 @@ bench:
 VERSION ?= $(patsubst v%,%,$(GIT_TAG))
 CUDA ?= 13
 PLATFORM ?= linux/arm64/v8
-TARGET ?= api
-TAG ?= $(VERSION)$(if $(filter full,$(TARGET)),,-$(TARGET))$(if $(filter 13,$(CUDA)),,-cuda$(CUDA))
-IMAGE = rndsrc/$(if $(filter full,$(TARGET)),cusmic,cupysmic):$(TAG)
+TARGET ?= all
 
 .PHONY: image
 image:
-	docker buildx build --load --platform $(PLATFORM) --target $(TARGET) \
-	    --build-arg VERSION=$(VERSION) --build-arg CUDA=$(CUDA) -t $(IMAGE) .
+	sh tool/image.sh "$(VERSION)" "$(CUDA)" "$(PLATFORM)" "$(TARGET)"
 
 # CUDA keeps each float64 operation in reference order.
 BUILD ?= build/cuda

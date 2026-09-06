@@ -1,7 +1,7 @@
 # cusmic
 
-L.A.Cosmic cosmic-ray removal in CuPy, with exact float64 reference
-checks.
+L.A.Cosmic cosmic-ray removal in CuPy and CUDA C/C++, with exact
+float64 reference checks.
 
 ## Python
 
@@ -50,47 +50,43 @@ The command reads one frame as float64 and saves cleaned pixels plus a
 It preserves the input header and refuses overwrite.
 Use `--help` for gain, read noise and detection options.
 
+Build the CUDA C API and its matching FITS command with `make cuda`.
+The public C interface is in `src/cusmic.h`; run the command as
+`bin/cudasmic input.fits cleaned.fits --error error.fits`.
+
 ## Containers
 
 The host needs an NVIDIA driver, Docker and the NVIDIA Container Toolkit.
 The images provide the user-space CUDA runtime; use `--gpus all` to expose
 host-managed GPUs.
 
-| Target | Image | Contents |
+| `make image TARGET=...` | Image | Contents |
 | --- | --- | --- |
-| `api` | `rndsrc/cupysmic:<VERSION>-api` | Python API |
-| `cli` | `rndsrc/cupysmic:<VERSION>-cli` | API and FITS command |
-| `full` | `rndsrc/cusmic:<VERSION>` | CLI, tests, references, benchmarks and Jupyter demo |
+| `cupysmic`      | `rndsrc/cupysmic:<VERSION>`      | CuPy API and FITS command   |
+| `cupysmic-slim` | `rndsrc/cupysmic:<VERSION>-slim` | CuPy API                    |
+| `cudasmic`      | `rndsrc/cudasmic:<VERSION>`      | CUDA C API and FITS command |
+| `cudasmic-slim` | `rndsrc/cudasmic:<VERSION>-slim` | CUDA C API and header       |
 
-Build locally (ARM64 for Spark, CUDA 13):
+Build all four ARM64 images with the default CUDA runtime:
 ```sh
-make image TARGET=api
-make image TARGET=cli
-make image TARGET=full
+make image
+make image TARGET=cudasmic
 ```
 An exact version tag supplies `VERSION`; other checkouts use `0.0.0`.
 Set `VERSION` to override it and `PLATFORM=linux/amd64` for an x86-64 host.
-Builds record the commit ID for benchmark results.
-`CUDA=12` selects the compatibility build and appends `-cuda12` to its tag.
-An explicit `-cuda13` alias denotes the same stack as the default.
-Defaults stay fixed within a release; CUDA compatibility builds require a
-compatible host driver and separate GPU qualification.
+`CUDA=12` currently builds CuPy roles only and appends `-cuda12` to the tag.
+CUDA C/C++ roles use CUDA 13 until another runtime has been qualified.
 
 ```sh
-docker run --rm --gpus all -v "$PWD:/data" rndsrc/cupysmic:<VERSION>-api script.py
-docker run --rm --gpus all -v "$PWD:/data" rndsrc/cupysmic:<VERSION>-cli \
+docker run --rm --gpus all -v "$PWD:/data" rndsrc/cupysmic:<VERSION> \
     input.fits cleaned.fits --error error.fits
-docker run --rm --gpus all rndsrc/cusmic:<VERSION>
+docker run --rm --gpus all -v "$PWD:/data" rndsrc/cudasmic:<VERSION> \
+    input.fits cleaned.fits --error error.fits
 ```
-The full image defaults to GPU-required tests. For host checks or reference
-generation, replace its arguments with `-m pytest -q` or
-`test/mkref.py /data/reference` (mount an output directory).
 
-The multi-stage [Dockerfile](Dockerfile) shares the core layer across targets.
-The API image has no shell, pip, CLI packages, demo or test data.
-CuPy retains NVRTC, its builtins and headers to compile kernels at runtime.
-`rndsrc/cudasmic:<VERSION>-api` and `-cli` are reserved for the CUDA C/C++
-implementation; this branch currently builds CuPy only.
+The [Dockerfile](Dockerfile) builds both APIs. The host supplies the NVIDIA
+driver; the images supply the user-space CUDA libraries. CuPy retains NVRTC
+and headers to compile kernels at runtime.
 
 ## Checks and examples
 
