@@ -92,7 +92,7 @@ and headers to compile kernels at runtime.
 
 With CuPy and the CUDA toolkit installed:
 ```sh
-python -m pip install astropy click pytest ruff
+python -m pip install astropy click pytest ruff 'lacosmic==1.4.0'
 make build
 make check
 make check GPU_REQUIRED=1 PYTEST_ARGS=--require-gpu

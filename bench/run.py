@@ -1,4 +1,4 @@
-"""Benchmark CuPy and CUDA in separate processes and compare per-frame times."""
+"""Benchmark CPU L.A.Cosmic, CuPy and CUDA in separate processes."""
 
 import argparse
 import csv
@@ -20,8 +20,11 @@ def positive_int(value):
 
 
 def measure(backend, frames, warmups, repeats):
-    command = ([sys.executable, "-m", "bench.bench"] if backend == "cupy"
-               else [str(ROOT / "build/cuda/bench")])
+    command = {
+        "cpu": [sys.executable, "-m", "bench.cpu"],
+        "cupy": [sys.executable, "-m", "bench.bench"],
+        "cuda": [str(ROOT / "build/cuda/bench")],
+    }[backend]
     command += ["--frames", str(frames), "--warmups", str(warmups),
                 "--repeats", str(repeats)]
     env = os.environ.copy()
@@ -42,14 +45,19 @@ def per_frame(record, stage, frames):
     return ms / frames
 
 
-def comparison(frames, cupy, cuda):
-    row = {"frames": frames}
+def comparison(frames, cpu, cupy, cuda):
+    row = {"frames": frames, "cpu_first_ms_per_frame": per_frame(cpu, "first", frames)}
     for stage in STAGES:
         a = per_frame(cupy, stage, frames)
         b = per_frame(cuda, stage, frames)
         row[f"cupy_{stage}_ms_per_frame"] = a
         row[f"cuda_{stage}_ms_per_frame"] = b
         row[f"cuda_vs_cupy_{stage}_speedup"] = a / b
+        if stage in ("clean", "total"):
+            c = per_frame(cpu, stage, frames)
+            row[f"cpu_{stage}_ms_per_frame"] = c
+            row[f"cupy_vs_cpu_{stage}_speedup"] = c / a
+            row[f"cuda_vs_cpu_{stage}_speedup"] = c / b
     return row
 
 
@@ -65,13 +73,13 @@ def main():
     rows = []
     for frames in args.frames:
         records = {}
-        for backend in ("cupy", "cuda"):
+        for backend in ("cupy", "cuda", "cpu"):
             print(f"Measuring {backend}, {frames} frame(s)...", flush=True)
             record = measure(backend, frames, args.warmups, args.repeats)
             (args.output / f"{backend}-{frames}.json").write_text(
                 json.dumps(record, indent=2, sort_keys=True) + "\n")
             records[backend] = record
-        rows.append(comparison(frames, records["cupy"], records["cuda"]))
+        rows.append(comparison(frames, records["cpu"], records["cupy"], records["cuda"]))
 
     with (args.output / "comparison.csv").open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
@@ -79,14 +87,16 @@ def main():
         writer.writerows(rows)
 
     print("\nMedian milliseconds per frame (warmed):")
-    print("Frames   CuPy clean  CUDA clean  Clean speedup   CuPy total  CUDA total  Total speedup")
-    for row in rows:
-        print(f"{row['frames']:>6}  {row['cupy_clean_ms_per_frame']:>10.3f}"
-              f"  {row['cuda_clean_ms_per_frame']:>10.3f}"
-              f"  {row['cuda_vs_cupy_clean_speedup']:>13.2f}x"
-              f"  {row['cupy_total_ms_per_frame']:>10.3f}"
-              f"  {row['cuda_total_ms_per_frame']:>10.3f}"
-              f"  {row['cuda_vs_cupy_total_speedup']:>13.2f}x")
+    for stage in ("clean", "total"):
+        print(f"{stage.title()} calls:")
+        print("Frames    CPU ms   CuPy ms   CUDA ms  CuPy/CPU  CUDA/CPU  CUDA/CuPy")
+        for row in rows:
+            print(f"{row['frames']:>6}  {row[f'cpu_{stage}_ms_per_frame']:>8.3f}"
+                  f"  {row[f'cupy_{stage}_ms_per_frame']:>8.3f}"
+                  f"  {row[f'cuda_{stage}_ms_per_frame']:>8.3f}"
+                  f"  {row[f'cupy_vs_cpu_{stage}_speedup']:>11.2f}x"
+                  f"  {row[f'cuda_vs_cpu_{stage}_speedup']:>11.2f}x"
+                  f"  {row[f'cuda_vs_cupy_{stage}_speedup']:>9.2f}x")
     print(f"Samples and comparison: {args.output}")
 
 
