@@ -53,11 +53,14 @@ BIN ?= bin
 CUDA_PATH ?= /usr/local/cuda
 NVCC ?= $(CUDA_PATH)/bin/nvcc
 CUDA_ARCH ?= 75
+CUDA_ARCHS ?= $(CUDA_ARCH)
 NVCCFLAGS ?= -O2
 REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 CUDA_HEADERS = $(wildcard src/*.h src/*.cuh)
+CUDA_GENCODE = $(foreach arch,$(CUDA_ARCHS),\
+    -gencode arch=compute_$(arch),code=\"sm_$(arch),compute_$(arch)\")
 CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
-    -gencode arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" \
+    $(CUDA_GENCODE) \
     -Xcompiler=-fPIC,-Wall,-Wextra,-Werror,-ffp-contract=off \
     -DCUSMIC_VERSION='"$(VERSION)"'
 
