@@ -103,3 +103,9 @@ $(BUILD)/test_api: test/test_api.c src/cusmic.h $(BUILD)/libcusmic.so
 $(BUILD)/test_io: test/test_io.c src/io.h $(BUILD)/io.o
 	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< \
 	    $(BUILD)/io.o $(FITS_LIBS) -lm -o $@
+
+# Distinct frames and caller-stream handoff use the public device C API.
+$(BUILD)/test_batch: test/test_batch.cu src/cusmic.h $(CUDA_HEADERS) \
+    $(BUILD)/libcusmic.so
+	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc $< -L$(BUILD) -lcusmic \
+	    -Xlinker=-rpath,'$$ORIGIN' -o $@
