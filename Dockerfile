@@ -24,6 +24,7 @@ COPY	test/test_api.c test/test_io.c test/test_reference.c test/test_batch.cu ./t
 COPY	bench/bench.cu ./bench/
 RUN	make cuda build/cuda/test_api build/cuda/test_io build/cuda/test_batch build/cuda/test_reference build/cuda/bench \
 	CC=/usr/bin/gcc-11 NVCC="/usr/local/cuda/bin/nvcc -ccbin=/usr/bin/g++-11" VERSION="$VERSION" CUDA_ARCHS="$CUDA_ARCHS"
+RUN	./build/cuda/test_io
 
 #------------------------------------------------------------------------------
 # CuPy uses the same pinned toolkit version through CUDA runtime/NVRTC wheels.
@@ -69,11 +70,13 @@ WORKDIR	/data
 FROM	cupy-runtime AS cupy-api
 
 COPY --from=cupy-builder	/opt/venv/ /opt/venv/
+CMD	["python", "-c", "import cusmic; print('cusmic', cusmic.__version__)"]
 
 #------------------------------------------------------------------------------
 FROM	cupy-runtime AS cupy-cli
 
 COPY --from=cupy-cli-builder	/opt/venv/ /opt/venv/
+RUN	cupysmic --help
 
 ENTRYPOINT	["cupysmic"]
 CMD	["--help"]
@@ -95,6 +98,7 @@ ENV	NVIDIA_DRIVER_CAPABILITIES=compute,utility \
 	CUSMIC_REVISION=$REVISION
 
 WORKDIR	/data
+CMD	["/bin/true"]
 
 #------------------------------------------------------------------------------
 FROM	cuda-api AS cuda-cli
@@ -105,6 +109,7 @@ RUN	apt-get update &&\
 COPY --from=cuda-builder	/src/bin/cudasmic /usr/local/bin/
 
 ENV	PATH=/usr/local/bin/:$PATH
+RUN	cudasmic --help
 
 ENTRYPOINT	["cudasmic"]
 CMD	["--help"]
