@@ -98,3 +98,8 @@ cuda-reference-check: $(BUILD)/test_reference
 $(BUILD)/test_api: test/test_api.c src/cusmic.h $(BUILD)/libcusmic.so
 	$(CC) -std=c11 $(CFLAGS) $(WARN) -Isrc $< -L$(BUILD) -lcusmic -lm \
 	    -Wl,-rpath,'$$ORIGIN' -o $@
+
+# Generated FITS cases need no CUDA device or saved fixture.
+$(BUILD)/test_io: test/test_io.c src/io.h $(BUILD)/io.o
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< \
+	    $(BUILD)/io.o $(FITS_LIBS) -lm -o $@
