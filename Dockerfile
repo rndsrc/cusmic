@@ -91,6 +91,50 @@ COPY demo/ ./demo/
 ENTRYPOINT ["/usr/bin/python3"]
 CMD ["-m", "pytest", "-q", "-rs", "--require-gpu", "-p", "no:cacheprovider"]
 
+#==============================================================================
+# Compile the C API and FITS command with the default CUDA 13 toolkit.
+FROM nvidia/cuda:${TK13}-devel-ubuntu22.04 AS cuda-builder
+
+ARG VERSION=0.0.0
+ARG CUDA_ARCH=75
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc-11 g++-11 make libcfitsio-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY Makefile ./
+COPY src/ ./src/
+COPY test/test_reference.c ./test/test_reference.c
+# Compile the exact-reference checker; GPU execution belongs on a GPU host.
+RUN make cuda build/cuda/test_reference VERSION="$VERSION" CUDA_ARCH="$CUDA_ARCH" CC=gcc-11 \
+    NVCCFLAGS='-O2 -ccbin=g++-11'
+
+#------------------------------------------------------------------------------
+# The host supplies the NVIDIA driver. The C API links the CUDA runtime statically.
+FROM nvidia/cuda:${TK13}-base-ubuntu22.04 AS cuda-api
+
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+COPY --from=cuda-builder /src/src/cusmic.h /usr/local/include/cusmic.h
+COPY --from=cuda-builder /src/build/cuda/libcusmic.so /usr/local/lib/libcusmic.so
+COPY --from=cuda-builder /src/build/cuda/libcusmic.a /usr/local/lib/libcusmic.a
+RUN ldconfig
+
+WORKDIR /data
+CMD ["/bin/true"]
+
+#------------------------------------------------------------------------------
+FROM cuda-api AS cuda-cli
+
+RUN apt-get update && apt-get install -y --no-install-recommends libcfitsio9 && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=cuda-builder /src/bin/cudasmic /usr/local/bin/cudasmic
+RUN cudasmic --help
+
+ENTRYPOINT ["/usr/local/bin/cudasmic"]
+CMD ["--help"]
+
 #------------------------------------------------------------------------------
 # Keep the API image last so it is the default build target.
 FROM runtime AS api
