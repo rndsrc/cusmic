@@ -53,6 +53,12 @@ FROM	cupy-builder AS cupy-cli-builder
 RUN	/opt/venv/bin/python -m pip install --no-compile --only-binary=:all: \
 	numpy astropy click
 
+#------------------------------------------------------------------------------
+FROM	cupy-cli-builder AS full-builder
+
+RUN	/opt/venv/bin/python -m pip install --no-compile --only-binary=:all: \
+	'pytest>=8.2' 'lacosmic==1.4.0' matplotlib jupyterlab
+
 #==============================================================================
 # Both runtime families are ordinary Bookworm images.
 FROM	python:3.13-slim-bookworm AS cupy-runtime
@@ -113,3 +119,29 @@ RUN	cudasmic --help
 
 ENTRYPOINT	["cudasmic"]
 CMD	["--help"]
+
+#------------------------------------------------------------------------------
+# The full image runs exact checks and matched GPU benchmarks.
+FROM	cupy-runtime AS full
+
+COPY --from=full-builder	/opt/venv/ /opt/venv/
+RUN	apt-get update &&\
+	apt-get install -y --no-install-recommends libstdc++6 libcfitsio10 &&\
+	rm -rf /var/lib/apt/lists/*
+
+WORKDIR	/src
+COPY	pyproject.toml ./
+COPY	test/ ./test/
+COPY	bench/ ./bench/
+COPY	demo/ ./demo/
+COPY	tool/report.sh ./tool/report.sh
+COPY --from=cuda-builder	/src/build/cuda/ ./build/cuda/
+COPY --from=cuda-builder	/src/bin/ ./bin/
+COPY	src/cusmic.h /usr/local/include/
+COPY	LICENSE /usr/share/licenses/cusmic/LICENSE
+
+ENV	LD_LIBRARY_PATH=/src/build/cuda:/usr/local/lib \
+	PATH=/src/bin:$PATH \
+	CHECK_PREBUILT=1 \
+	GPU_REQUIRED=1
+ENTRYPOINT	["sh", "/src/tool/report.sh"]
