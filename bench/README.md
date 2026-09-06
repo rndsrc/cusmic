@@ -1,32 +1,25 @@
 # Benchmark
 
-Run from the repository root on a GPU:
-```sh
-make bench
-make bench BENCH_ARGS="--frames 4 --warmups 5 --repeats 15 --output bench/results/run.jsonl"
-```
-The command uses `test/data/` and verifies exact agreement with the saved
-reference. Each output line records hardware, software, settings and all
-timing samples. Local results belong in the ignored `bench/results/`;
-keep published measurements as CI or release artifacts.
+On an NVIDIA GPU, run `make bench` from the repository root. It benchmarks
+CuPy and CUDA separately for 1, 4, and 16 frames, using four warmups and
+sixteen samples. Use `python -m bench.run --frames 4 --output bench/results`
+for a shorter run after building `build/cuda/bench`.
 
-- First result: complete call including CUDA initialization and any compilation.
-  An existing CuPy disk cache can make this faster; its presence is recorded.
-- Upload: pageable host arrays to GPU, including `Image` construction.
-- Cleaning: complete `Cleaner` call with data and calibration already on the GPU.
-- Download: cleaned pixels and mask to host.
-- Total: independent complete upload, cleaning and download call.
+Both benchmarks use the saved image and error map in `test/data/`, repeat that
+scene for stack timings, and check the cleaned pixels and mask against the
+saved reference exactly. FITS reading and reference comparisons are outside
+the warmed intervals.
 
-Warmed samples synchronize the current stream before and after each interval.
-Disk I/O and reference comparisons are outside these intervals. Allocation
-and normal pool reuse remain part of the measured calls. The separately
-measured stages need not add up to the end-to-end total.
+The JSON records contain every sample and hardware details; `comparison.csv`
+contains per-frame medians and CUDA/CuPy speedups. The intervals are:
 
-To record results from a container:
-```sh
-mkdir -p bench/results
-docker run --rm --gpus all -v "$PWD/bench/results:/results" \
-    rndsrc/cusmic:0.0.0 -m bench.bench --frames 4 --output /results/run.jsonl
-```
-For an uncached first result, start a fresh container without a mounted CuPy
-cache. Notebook timings use its already initialized CUDA context.
+- First result: an ordinary complete call, including first CUDA use.
+- Upload: pageable host pixels and error map transferred to the GPU.
+- Clean: an ordinary call with inputs resident on the GPU.
+- Download: cleaned pixels and mask transferred to pageable host arrays.
+- Total: a fresh ordinary upload, clean, and download call.
+
+Each interval waits for GPU completion. Upload excludes CuPy `Image`
+construction; total includes each backend's preparation. Separately timed
+stages need not add up to total. Results belong in the ignored
+`bench/results/` directory.
