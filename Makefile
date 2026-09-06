@@ -93,3 +93,8 @@ $(BUILD)/test_reference: test/test_reference.c src/cusmic.h src/io.h \
 .PHONY: cuda-reference-check
 cuda-reference-check: $(BUILD)/test_reference
 	$(BUILD)/test_reference
+
+# Invalid host calls must leave caller-owned outputs unchanged.
+$(BUILD)/test_api: test/test_api.c src/cusmic.h $(BUILD)/libcusmic.so
+	$(CC) -std=c11 $(CFLAGS) $(WARN) -Isrc $< -L$(BUILD) -lcusmic -lm \
+	    -Wl,-rpath,'$$ORIGIN' -o $@
