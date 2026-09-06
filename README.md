@@ -90,27 +90,23 @@ and headers to compile kernels at runtime.
 
 ## Checks and examples
 
-With CuPy installed:
+With CuPy and the CUDA toolkit installed:
 ```sh
 python -m pip install astropy click pytest ruff
+make build
 make check
-make test PYTEST_ARGS=--require-gpu
-make bench BENCH_ARGS="--frames 4 --output bench/results/run.jsonl"
+make check GPU_REQUIRED=1 PYTEST_ARGS=--require-gpu
+make bench
 ```
 
-- [Tests and reference generation](test/README.md): `make unit`, `make e2e`,
-  `make test`, `make mkref`.
-- [Benchmarks](bench/README.md): warmed cleaning, transfers and complete calls;
-  JSON records for comparing hardware and software.
+- [Tests and reference generation](test/README.md): `make unit-test`,
+  `make e2e-test`, `make mkref`.
+- [Benchmarks](bench/README.md): warmed stage and complete-call timings;
+  JSON samples and a per-frame comparison table.
 - [Demo notebook](demo/demo.ipynb): API use, reference images and timings;
   runs locally or in Google Colab.
 
 All three use the same saved scene in `test/data/`.
 Normal tests compare float64 pixels bit for bit and masks exactly, without
-regenerating data. CPU L.A.Cosmic provides the reference; cusmic requires a GPU.
-
-[Checks](.github/workflows/check.yml) run on AMD64 and ARM64.
-The [image workflow](.github/workflows/images.yml) builds both architectures
-under each tag and checks them without a GPU. Publishing is a manual action
-on a GPU-verified release tag; configure `DOCKERHUB_USERNAME` as a repository
-variable and `DOCKERHUB_TOKEN` as a secret. Tag pushes build but do not publish.
+regenerating data. CPU L.A.Cosmic provides the reference; GPU correctness
+requires an actual GPU run.

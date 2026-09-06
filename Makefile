@@ -4,28 +4,38 @@ PYTHON ?= python3
 PYTEST_ARGS ?=
 BENCH_ARGS ?=
 REFDIR ?= test/data
+BUILD ?= build/cuda
+GPU_REQUIRED ?= 0
 
 export PYTHONPATH := $(CURDIR)/mod:$(PYTHONPATH)
+export GPU_REQUIRED
 
-.PHONY: check unit e2e test mkref bench
+.PHONY: build check lint unit-test e2e-test unit e2e test mkref bench
 
-check:
+build: cuda
+	$(PYTHON) -m compileall -q mod/cusmic
+
+check: lint
+	sh test/check.sh all "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
+
+lint:
 	$(PYTHON) -m ruff check .
 
-unit:
-	$(PYTHON) -m pytest -q -rs -m 'not e2e' $(PYTEST_ARGS)
+unit-test:
+	sh test/check.sh unit "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
 
-e2e:
-	$(PYTHON) -m pytest -q -rs -m e2e $(PYTEST_ARGS)
+e2e-test:
+	sh test/check.sh e2e "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
 
-test:
-	$(PYTHON) -m pytest -q -rs $(PYTEST_ARGS)
+unit: unit-test
+e2e: e2e-test
+test: check
 
 mkref:
 	$(PYTHON) test/mkref.py $(REFDIR)
 
-bench:
-	$(PYTHON) -m bench.bench $(BENCH_ARGS)
+bench: $(BUILD)/bench
+	$(PYTHON) -m bench.run $(BENCH_ARGS)
 
 VERSION ?= $(patsubst v%,%,$(GIT_TAG))
 CUDA ?= 13
@@ -37,7 +47,6 @@ image:
 	sh tool/image.sh "$(VERSION)" "$(CUDA)" "$(PLATFORM)" "$(TARGET)"
 
 # CUDA keeps each float64 operation in reference order.
-BUILD ?= build/cuda
 BIN ?= bin
 CUDA_PATH ?= /usr/local/cuda
 NVCC ?= $(CUDA_PATH)/bin/nvcc
