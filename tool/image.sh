@@ -10,8 +10,8 @@ revision=$(git rev-parse HEAD 2>/dev/null || echo dev)
 
 case "$role" in
     all) target="cuda${cuda}" ;;
-    full) target="cuda${cuda}-cusmic" ;;
-    *) target="cuda${cuda}-${role}" ;;
+    full) target="cusmic-cuda${cuda}" ;;
+    *) target="${role}-cuda${cuda}" ;;
 esac
 
 docker buildx bake --load --var VERSION="$version" --var REVISION="$revision" \

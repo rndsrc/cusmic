@@ -7,7 +7,7 @@ variable "CUPY_VERSION" { default = "" }
 
 # Add linux/amd64 through PLATFORM after qualifying that build on a GPU host.
 target "images" {
-  name = "${variant.name}-${role.key}"
+  name = "${role.key}-${variant.name}"
   matrix = {
     variant = [
       {
@@ -32,6 +32,7 @@ target "images" {
       { key = "cupysmic-slim", stage = "cupy-api", image = "cupysmic", suffix = "-slim" },
       { key = "cudasmic",      stage = "cuda-cli", image = "cudasmic", suffix = "" },
       { key = "cudasmic-slim", stage = "cuda-api", image = "cudasmic", suffix = "-slim" },
+      { key = "cusmic",        stage = "full", image = "cusmic", suffix = "" },
     ]
   }
 
@@ -52,21 +53,24 @@ target "images" {
 
 group "cuda12" {
   targets = [
-    "cuda12-cupysmic", "cuda12-cupysmic-slim",
-    "cuda12-cudasmic", "cuda12-cudasmic-slim",
+    "cupysmic-cuda12", "cupysmic-slim-cuda12",
+    "cudasmic-cuda12", "cudasmic-slim-cuda12",
+    "cusmic-cuda12",
   ]
 }
 
 group "cuda13" {
   targets = [
-    "cuda13-cupysmic", "cuda13-cupysmic-slim",
-    "cuda13-cudasmic", "cuda13-cudasmic-slim",
+    "cupysmic-cuda13", "cupysmic-slim-cuda13",
+    "cudasmic-cuda13", "cudasmic-slim-cuda13",
+    "cusmic-cuda13",
   ]
 }
 
 group "default" {
   targets = [
-    "cuda13-cupysmic", "cuda13-cupysmic-slim",
-    "cuda13-cudasmic", "cuda13-cudasmic-slim",
+    "cupysmic-cuda13", "cupysmic-slim-cuda13",
+    "cudasmic-cuda13", "cudasmic-slim-cuda13",
+    "cusmic-cuda13",
   ]
 }

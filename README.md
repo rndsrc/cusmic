@@ -66,22 +66,30 @@ host-managed GPUs.
 | `cupysmic-slim` | `rndsrc/cupysmic:<VERSION>-slim` | CuPy API                    |
 | `cudasmic`      | `rndsrc/cudasmic:<VERSION>`      | CUDA C API and FITS command |
 | `cudasmic-slim` | `rndsrc/cudasmic:<VERSION>-slim` | CUDA C API and header       |
+| `full`          | `rndsrc/cusmic:<VERSION>`        | APIs, tests and benchmarks |
 
-Build all four ARM64 images with the default CUDA runtime:
+Build all five ARM64 images with the default CUDA runtime:
 ```sh
 make image
 make image TARGET=cudasmic
 ```
 An exact version tag supplies `VERSION`; other checkouts use `0.0.0`.
 Set `VERSION` to override it and `PLATFORM=linux/amd64` for an x86-64 host.
-`CUDA=12` currently builds CuPy roles only and appends `-cuda12` to the tag.
-CUDA C/C++ roles use CUDA 13 until another runtime has been qualified.
+`CUDA=12` builds the same roles with `-cuda12` tags. GPU checks are
+needed before using that runtime for cleaning.
 
 ```sh
 docker run --rm --gpus all -v "$PWD:/data" rndsrc/cupysmic:<VERSION> \
     input.fits cleaned.fits --error error.fits
 docker run --rm --gpus all -v "$PWD:/data" rndsrc/cudasmic:<VERSION> \
     input.fits cleaned.fits --error error.fits
+```
+
+On an NVIDIA host, the combined image writes exact checks and warmed
+benchmarks to `/data/results`:
+```sh
+docker run --rm --gpus all -v "$PWD/results:/data/results" \
+    rndsrc/cusmic:<VERSION>
 ```
 
 The [Dockerfile](Dockerfile) builds both APIs. The host supplies the NVIDIA
