@@ -40,15 +40,19 @@ def timed(call):
     return 1000 * (perf_counter() - start), result
 
 
-def benchmark(data, error, settings, repeats=15, warmups=5):
+def benchmark(data, error, settings, repeats=16, warmups=4):
     """First result includes CUDA initialization; warmed samples wait for all work."""
     cache = Path(os.environ.get("CUPY_CACHE_DIR", "~/.cupy/kernel_cache")).expanduser()
     cache_existed = cache.exists()
     start = perf_counter()
     cleaner = Cleaner(**settings)
 
+    def transfer():
+        return cp.asarray(data), cp.asarray(error)
+
     def upload():
-        return Image(cp.asarray(data), error=cp.asarray(error))
+        pixels, noise = transfer()
+        return Image(pixels, error=noise)
 
     def end_to_end():
         return tuple(cp.asnumpy(a) for a in cleaner(upload()))
@@ -57,24 +61,31 @@ def benchmark(data, error, settings, repeats=15, warmups=5):
     first_ms = 1000 * (perf_counter() - start)
     for _ in range(warmups):
         end_to_end()
+    samples = {name: [] for name in ("upload_ms", "clean_ms", "download_ms", "total_ms")}
+    for _ in range(repeats):
+        elapsed, uploaded = timed(transfer)
+        samples["upload_ms"].append(elapsed)
+        del uploaded
+
     image = upload()
     for _ in range(warmups):
         timed(lambda: cleaner(image))
-    samples = {name: [] for name in ("upload_ms", "clean_ms", "download_ms", "total_ms")}
     for _ in range(repeats):
-        elapsed, uploaded = timed(upload)
-        samples["upload_ms"].append(elapsed)
-        del uploaded
         elapsed, result = timed(lambda: cleaner(image))
         samples["clean_ms"].append(elapsed)
         elapsed, downloaded = timed(lambda result=result: tuple(cp.asnumpy(a) for a in result))
         samples["download_ms"].append(elapsed)
+        np.testing.assert_array_equal(downloaded[0].view("uint64"), first[0].view("uint64"))
+        np.testing.assert_array_equal(downloaded[1], first[1])
+        del result, downloaded
+
+    image = None
+    for _ in range(repeats):
         elapsed, complete = timed(end_to_end)
         samples["total_ms"].append(elapsed)
-        for output in (downloaded, complete):
-            np.testing.assert_array_equal(output[0].view("uint64"), first[0].view("uint64"))
-            np.testing.assert_array_equal(output[1], first[1])
-        del result, downloaded, complete
+        np.testing.assert_array_equal(complete[0].view("uint64"), first[0].view("uint64"))
+        np.testing.assert_array_equal(complete[1], first[1])
+        del complete
     device = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
     record = dict(
         host_memory="pageable", allocation="ordinary calls",
@@ -100,8 +111,8 @@ def benchmark(data, error, settings, repeats=15, warmups=5):
 @click.option("--error", default=str(DATA / "error.fits.gz"), type=click.Path(exists=True))
 @click.option("--reference", default=str(DATA / "reference.fits.gz"), type=click.Path(exists=True))
 @click.option("--frames", default=1, type=click.IntRange(min=1))
-@click.option("--repeats", default=15, type=click.IntRange(min=1), show_default=True)
-@click.option("--warmups", default=5, type=click.IntRange(min=1), show_default=True)
+@click.option("--repeats", default=16, type=click.IntRange(min=1), show_default=True)
+@click.option("--warmups", default=4, type=click.IntRange(min=1), show_default=True)
 @click.option("--output", type=click.Path(path_type=Path), help="Append a JSON record to this file.")
 def main(path, error, reference, frames, repeats, warmups, output):
     """Benchmark the saved L.A.Cosmic example; disk I/O is outside warmed timings."""
