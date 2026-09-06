@@ -86,3 +86,13 @@ $(BIN)/cudasmic: src/main.c src/cusmic.h src/io.h $(BUILD)/io.o $(BUILD)/libcusm
 	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< $(BUILD)/io.o \
 	    -L$(BUILD) -lcusmic $(FITS_LIBS) -lm -Wl,-rpath,'$$ORIGIN/../$(BUILD)' -o $@
 	strip --strip-unneeded $@
+
+# Compare the C API with the saved float64 reference pixels and mask.
+$(BUILD)/test_reference: test/test_reference.c src/cusmic.h src/io.h \
+    $(BUILD)/io.o $(BUILD)/libcusmic.so
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< $(BUILD)/io.o \
+	    -L$(BUILD) -lcusmic $(FITS_LIBS) -lm -Wl,-rpath,'$$ORIGIN' -o $@
+
+.PHONY: cuda-reference-check
+cuda-reference-check: $(BUILD)/test_reference
+	$(BUILD)/test_reference
