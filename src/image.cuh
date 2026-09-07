@@ -68,3 +68,25 @@ restore_image(const double *clean, const uint8_t *crmask, const cusmic_image *im
 		mask[i] = crmask[i];
 	}
 }
+
+static __global__ void
+copy_without_detection(const cusmic_image *ims, double *out, uint8_t *mask, double scalar, int n)
+{
+	out = frame(out, n);
+	mask = frame(mask, n);
+	const auto &im = ims[blockIdx.y];
+	const double *data = im.data;
+	const double *map = im.background;
+	int i = pixel_index();
+	if (i >= n)
+		return;
+
+	double v = isfinite(data[i]) ? data[i] : 0;
+	if (map || !isnan(scalar)) {
+		double bg = map ? map[i] : scalar;
+		v += 1 * bg;
+		v += -1 * bg;
+	}
+	out[i] = isfinite(data[i]) ? v : data[i];
+	mask[i] = 0;
+}

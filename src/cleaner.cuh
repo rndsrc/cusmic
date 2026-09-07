@@ -145,6 +145,18 @@ inline void
 clean_images(const cusmic_image *ims, size_t nf, const cusmic_options &o, double *output,
 	uint8_t *mask, cudaStream_t stream)
 {
+	if (!o.maxiter) {
+		int n = ims[0].width * ims[0].height;
+		buffer<cusmic_image> input(nf);
+		cuda_check(cudaMemcpyAsync(input.data, ims, nf * sizeof(*ims), cudaMemcpyHostToDevice,
+			stream));
+		copy_without_detection<<<dim3((n - 1) / 256 + 1, nf), 256, 0, stream>>>(
+			input.data, output, mask, o.background, n);
+		cuda_check(cudaGetLastError());
+		cuda_check(cudaStreamSynchronize(stream));
+		return;
+	}
+
 	bool model = false, has_bg = !std::isnan(o.background);
 	for (size_t f = 0; f < nf; ++f) {
 		model |= !ims[f].error;
