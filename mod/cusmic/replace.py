@@ -15,7 +15,7 @@
 
 import cupy as cp
 
-RADIUS = 2     # replacement window is 5x5 (paper sec 3.1)
+RADIUS = 2  # replacement window is 5x5 (paper sec 3.1)
 BUDGET = 1 << 18  # Gathered values per batch; at least one window is needed.
 
 
@@ -26,15 +26,17 @@ def local_median(clean, donors, targets, offsets):
     dy, dx = offsets
     yy, xx = y + dy, x + dx
     inside = (yy >= 0) & (yy < ny) & (xx >= 0) & (xx < nx)
-    yy, xx = yy.clip(0, ny-1), xx.clip(0, nx-1)
+    yy.clip(0, ny - 1, out=yy)
+    xx.clip(0, nx - 1, out=xx)
     at = (*f, yy, xx)
-    valid  = inside & donors[at]
-    values = cp.where(valid, clean[at], clean.dtype.type(cp.inf))
+    valid = inside & donors[at]
+    values = clean[at]
+    cp.copyto(values, clean.dtype.type(cp.inf), where=~valid)
     values.sort(axis=1)  # Donors first, ascending; the +inf padding sorts last.
     count = cp.count_nonzero(valid, axis=1)
     rows  = cp.arange(len(count))
-    low, high = values[rows, (count-1)//2], values[rows, count//2]
-    return cp.where(count%2, 0.0+low, ((0.0+low)+high)/2), count > 0
+    low, high = values[rows, (count - 1) // 2], values[rows, count // 2]
+    return cp.where(count % 2, 0.0 + low, ((0.0 + low) + high) / 2), count > 0
 
 
 def replace(clean, crmask, donors):
@@ -50,13 +52,13 @@ def replace(clean, crmask, donors):
         if not len(targets):
             break
         ry, rx = min(r, ny - 1), min(r, nx - 1)
-        offsets = cp.mgrid[-ry:ry+1, -rx:rx+1].reshape(2, -1)
+        offsets = cp.mgrid[-ry:ry + 1, -rx:rx + 1].reshape(2, -1)
         batch = max(1, BUDGET // offsets.shape[1])
         pending = []
         for i in range(0, len(targets), batch):
-            at = targets[i:i+batch]
+            at = targets[i:i + batch]
             median, found = local_median(clean, donors, at, offsets)
             clean[tuple(at[found].T)] = median[found]
             pending.append(at[~found])
-        targets = cp.concatenate(pending)
+        targets = pending[0] if len(pending) == 1 else cp.concatenate(pending)
     return clean
