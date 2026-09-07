@@ -21,7 +21,9 @@ FLOOR  = 0.01  # fine structure floor
 NOISE  = 1e-5  # median floor in the noise model (eq 10)
 
 
-def mklaplacian(dtype, mode, ndim=2):
+def mklaplacian(shape, dtype, mode):
+    ny, nx = shape[-2:]
+    ndim = len(shape)
 
     # Discrete Laplacian for the 2x2-replicated image (paper eq 4);
     # the paper's factor 1/4 is supplied by the flux-conserving
@@ -31,14 +33,13 @@ def mklaplacian(dtype, mode, ndim=2):
         [-1, 4,-1],
         [ 0,-1, 0],
     ], dtype=dtype).reshape((1,) * (ndim - 2) + (3, 3))
+    sampled = cp.empty((*shape[:-2], 2 * ny, 2 * nx), dtype=dtype)
+    lap2 = cp.empty_like(sampled)
 
     def laplacian(image):  # closure on kernel and mode
-        ny, nx = image.shape[-2:]
-        shape = image.shape[:-2]
-        sampled = cp.empty((*shape, ny, 2, nx, 2), dtype=dtype)
-        cp.divide(image[..., :, None, :, None], 4, out=sampled)
-        sampled = sampled.reshape(*shape, 2 * ny, 2 * nx)
-        lap2    = convolve(sampled, kernel, mode=mode)
+        blocks = sampled.reshape(*shape[:-2], ny, 2, nx, 2)
+        cp.divide(image[..., :, None, :, None], 4, out=blocks)
+        convolve(sampled, kernel, mode=mode, output=lap2)
         cp.maximum(lap2, 0, out=lap2)
 
         # Sum each 2x2 block as (a + b) + (c + d), order matters
