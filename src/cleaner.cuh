@@ -48,10 +48,10 @@ struct scratch {
 	double *clean, *med3, *med7, *fine, *lap, *tmp, *sig, *noise;
 	uint8_t *crmask, *cand, *grown, *excluded;
 
-	scratch(int w, int h, size_t nf, bool model)
+	scratch(int w, int h, size_t nf, bool model, double *output)
 	    : w(w), h(h), n(w * h), total(nf * n), block(256), grid((n - 1) / 256 + 1, nf),
-	      replace_grid((n - 1) / 8 + 1, nf), input(nf), pixels((7 + model) * total),
-	      masks(4 * total), dcount(nf), hcount(nf), clean(pixels.data), med3(clean + total),
+	      replace_grid((n - 1) / 8 + 1, nf), input(nf), pixels((6 + model) * total),
+	      masks(4 * total), dcount(nf), hcount(nf), clean(output), med3(pixels.data),
 	      med7(med3 + total), fine(med7 + total), lap(fine + total), tmp(lap + total),
 	      sig(tmp + total), noise(model ? sig + total : nullptr), crmask(masks.data),
 	      cand(crmask + total), grown(cand + total), excluded(grown + total)
@@ -149,7 +149,7 @@ clean_images(const cusmic_image *ims, size_t nf, const cusmic_options &o, double
 		model |= !ims[f].error;
 		has_bg |= ims[f].background != nullptr;
 	}
-	scratch s(ims[0].width, ims[0].height, nf, model);
+	scratch s(ims[0].width, ims[0].height, nf, model, output);
 	cuda_check(cudaMemcpyAsync(
 		s.input.data, ims, nf * sizeof(*ims), cudaMemcpyHostToDevice, stream));
 	clear_counts(s, stream);
