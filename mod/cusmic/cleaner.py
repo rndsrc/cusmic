@@ -79,8 +79,9 @@ class Cleaner:
                 targets = invalid & donors.any(axis=(-2, -1), keepdims=True)
                 replace(clean, targets, excluded)
 
-            laplacian = mklaplacian(cp.float64, self.border_mode, clean.ndim)
-            grow      = mkgrow(clean.ndim)
+            if self.maxiter:
+                laplacian = mklaplacian(cp.float64, self.border_mode, clean.ndim)
+                grow = mkgrow(clean.ndim)
 
             for i in range(self.maxiter):
                 lap   = laplacian(clean)
