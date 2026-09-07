@@ -42,10 +42,20 @@ def mklaplacian(shape, dtype, mode):
         convolve(sampled, kernel, mode=mode, output=lap2)
         cp.maximum(lap2, 0, out=lap2)
 
-        # Sum each 2x2 block as (a + b) + (c + d), order matters
+        # Keep the reference's summation order, including single columns.
         a, b = lap2[..., 0::2, 0::2], lap2[..., 0::2, 1::2]
         c, d = lap2[..., 1::2, 0::2], lap2[..., 1::2, 1::2]
-        return ((a + b) + c) + d if nx == 1 else (a + b) + (c + d)
+
+        lap = sampled.ravel()[:image.size].reshape(image.shape)
+        cp.add(a, b, out=lap)
+        if nx == 1:
+            cp.add(lap, c, out=lap)
+            cp.add(lap, d, out=lap)
+        else:
+            tmp = sampled.ravel()[image.size:2 * image.size].reshape(image.shape)
+            cp.add(c, d, out=tmp)
+            cp.add(lap, tmp, out=lap)
+        return lap
 
     return laplacian
 
