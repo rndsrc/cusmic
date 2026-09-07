@@ -79,8 +79,15 @@ def median(image, size, mode):
 
 def noise_model(clean, gain, readnoise, mode):
     """Poisson and read noise from the 5x5 median (eq 10)"""
-    m = cp.maximum(median(clean, ORDER, mode), NOISE)
-    return cp.sqrt(readnoise*readnoise + gain*m) / gain
+    noise = median(clean, ORDER, mode)
+    cp.maximum(noise, NOISE, out=noise)
+
+    rn2 = readnoise * readnoise
+    cp.multiply(gain, noise, out=noise)
+    cp.add(rn2, noise, out=noise)
+    cp.sqrt(noise, out=noise)
+    cp.divide(noise, gain, out=noise)
+    return noise
 
 
 def significance(lap, noise, mode):
