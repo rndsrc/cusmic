@@ -45,15 +45,15 @@ struct scratch {
 	buffer<uint8_t> masks;
 	buffer<counts> dcount;
 	std::vector<counts> hcount;
-	/* lap ends at snr; fine replaces med3 one pixel at a time. */
+	/* lap ends at snr; fine replaces med3 per pixel; med7 replaces tmp. */
 	double *clean, *med3, *med7, *fine, *lap, *tmp, *sig, *noise;
 	uint8_t *crmask, *cand, *grown, *excluded;
 
 	scratch(int w, int h, size_t nf, bool model, double *output, uint8_t *mask)
 	    : w(w), h(h), n(w * h), total(nf * n), block(256), grid((n - 1) / 256 + 1, nf),
-	      replace_grid((n - 1) / 8 + 1, nf), input(nf), pixels((4 + model) * total),
+	      replace_grid((n - 1) / 8 + 1, nf), input(nf), pixels((3 + model) * total),
 	      masks(3 * total), dcount(nf), hcount(nf), clean(output), med3(pixels.data),
-	      med7(med3 + total), fine(med3), lap(med3), tmp(med7 + total),
+	      med7(med3 + total), fine(med3), lap(med3), tmp(med7),
 	      sig(tmp + total), noise(model ? sig + total : nullptr), crmask(mask),
 	      cand(masks.data), grown(cand + total), excluded(grown + total)
 	{
