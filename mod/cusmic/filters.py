@@ -92,15 +92,21 @@ def noise_model(clean, gain, readnoise, mode):
 
 def significance(lap, noise, mode):
     """Remove smooth structure from Laplacian significance (eqs 11, 13)"""
-    S = lap / (2 * noise)
-    return S - median(S, ORDER, mode)
+    sig = lap / (2 * noise)
+    smooth = median(sig, ORDER, mode)
+    cp.subtract(sig, smooth, out=sig)
+    return sig
 
 
 def fine_structure(clean, noise, mode):
     """Noise-normalized fine structure for star rejection (eq 14)"""
-    m = median(clean, ORDER-2, mode)
-    F = m - median(m, ORDER+2, mode)
-    return cp.maximum(F / noise, FLOOR)
+    med3 = median(clean, ORDER - 2, mode)
+    med7 = median(med3, ORDER + 2, mode)
+    fine = med3
+    cp.subtract(fine, med7, out=fine)
+    cp.divide(fine, noise, out=fine)
+    cp.maximum(fine, FLOOR, out=fine)
+    return fine
 
 
 def detect(sig, fine, excluded, contrast, cr_threshold):
