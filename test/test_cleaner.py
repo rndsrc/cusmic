@@ -119,7 +119,8 @@ def test_replacement_batches(cp, monkeypatch):
     monkeypatch.setattr("cusmic.replace.BUDGET", 1)
     data = cp.asarray([[0.0, 1000, 1000, 1000, 1000, 1000, 60]])
     targets = data == 1000
-    cleaned = replace(data, targets, False)
+    donors = ~targets
+    cleaned = replace(data, targets, donors)
     assert cleaned is data
     np.testing.assert_array_equal(cp.asnumpy(cleaned), [[0, 0, 0, 30, 60, 60, 60]])
-    assert replace(data, cp.zeros(data.shape, dtype=bool), False) is data
+    assert replace(data, cp.zeros(data.shape, dtype=bool), donors) is data

@@ -37,12 +37,11 @@ def local_median(clean, donors, targets, offsets):
     return cp.where(count%2, 0.0+low, ((0.0+low)+high)/2), count > 0
 
 
-def replace(clean, crmask, excluded):
+def replace(clean, crmask, donors):
     """Fill targets in place from fixed donors in expanding 5x5 windows."""
     targets = cp.argwhere(crmask)
     if not len(targets):
         return clean
-    donors = ~crmask & cp.logical_not(excluded) & cp.isfinite(clean)
     available = donors.any(axis=(-2, -1))
     if not (available[targets[:, 0]].all() if clean.ndim == 3 else available):
         raise ValueError("no finite replacement donors")

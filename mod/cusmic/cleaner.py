@@ -71,15 +71,17 @@ class Cleaner:
             crmask = cp.zeros(clean.shape, dtype=bool)
             invalid = ~cp.isfinite(clean)
             excluded = invalid if image.mask is None else invalid | image.mask
-            donors = ~excluded
             cp.copyto(clean, 0, where=invalid)
             if image.background is not None:
                 clean += image.background
-            if self.maxiter and invalid.any() and donors.any():
-                targets = invalid & donors.any(axis=(-2, -1), keepdims=True)
-                replace(clean, targets, excluded)
 
             if self.maxiter:
+                available = ~excluded
+                donors = available & cp.isfinite(clean)
+                if invalid.any() and available.any():
+                    targets = invalid & available.any(axis=(-2, -1), keepdims=True)
+                    replace(clean, targets, donors)
+
                 laplacian = mklaplacian(cp.float64, self.border_mode, clean.ndim)
                 grow = mkgrow(clean.ndim)
 
@@ -100,7 +102,8 @@ class Cleaner:
                 if not n_new:
                     break
 
-                replace(clean, crmask, excluded)
+                cp.logical_and(donors, ~candidates, out=donors)
+                replace(clean, crmask, donors)
 
             if image.background is not None:
                 clean -= image.background
