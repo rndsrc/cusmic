@@ -154,10 +154,7 @@ clean_images(const cusmic_image *ims, size_t nf, const cusmic_options &o, double
 		s.input.data, ims, nf * sizeof(*ims), cudaMemcpyHostToDevice, stream));
 	clear_counts(s, stream);
 	prepare_image<<<s.grid, s.block, 0, stream>>>(
-		s.input.data, s.clean, s.crmask, s.excluded, s.dcount.data, s.n);
-	if (has_bg)
-		background<<<s.grid, s.block, 0, stream>>>(
-			s.clean, s.input.data, o.background, 1, s.n);
+		s.input.data, s.clean, s.crmask, s.excluded, s.dcount.data, o.background, s.n);
 	read_counts(s, stream);
 	fill_holes(s, o, has_bg, stream);
 	cuda_check(cudaMemsetAsync(s.crmask, 0, s.total, stream));

@@ -35,7 +35,7 @@ background(double *clean, const cusmic_image *ims, double scalar, int sign, int 
 
 static __global__ void
 prepare_image(const cusmic_image *ims, double *clean, uint8_t *invalid, uint8_t *excluded,
-	counts *count, int n)
+	counts *count, double scalar, int n)
 {
 	clean = frame(clean, n);
 	invalid = frame(invalid, n);
@@ -43,6 +43,7 @@ prepare_image(const cusmic_image *ims, double *clean, uint8_t *invalid, uint8_t 
 	count += blockIdx.y;
 	const auto &im = ims[blockIdx.y];
 	const double *data = im.data;
+	const double *map = im.background;
 	const uint8_t *mask = im.mask;
 	int i = pixel_index();
 	bool hole = i < n && !isfinite(data[i]);
@@ -51,6 +52,8 @@ prepare_image(const cusmic_image *ims, double *clean, uint8_t *invalid, uint8_t 
 		invalid[i] = hole;
 		excluded[i] = !allowed;
 		clean[i] = hole ? 0 : data[i];
+		if (map || !isnan(scalar))
+			clean[i] += 1 * (map ? map[i] : scalar);
 	}
 	count_block(hole, &count->todo);
 	count_block(allowed, &count->donors);
