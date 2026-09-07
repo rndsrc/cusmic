@@ -76,35 +76,35 @@ class Cleaner:
                 clean += image.background
 
             if self.maxiter:
-                available = ~excluded
-                donors = available & cp.isfinite(clean)
-                if invalid.any() and available.any():
-                    targets = invalid & available.any(axis=(-2, -1), keepdims=True)
+                initial_donors = ~excluded
+                donors = initial_donors & cp.isfinite(clean)
+                if invalid.any() and initial_donors.any():
+                    targets = invalid & initial_donors.any(axis=(-2, -1), keepdims=True)
                     replace(clean, targets, donors)
 
-                laplacian = mklaplacian(clean.shape, cp.float64, self.border_mode)
+                laplacian = mklaplacian(clean.shape, clean.dtype, self.border_mode)
                 grow = mkgrow(clean.ndim)
 
-            for i in range(self.maxiter):
-                lap   = laplacian(clean)
-                noise = image.noise(clean, mode=self.border_mode)
-                sig   = significance(lap, noise, mode=self.border_mode)
-                fine  = fine_structure(clean, noise, mode=self.border_mode)
-                cp.copyto(sig, 0, where=invalid)
+                for i in range(self.maxiter):
+                    lap = laplacian(clean)
+                    noise = image.noise(clean, mode=self.border_mode)
+                    sig = significance(lap, noise, mode=self.border_mode)
+                    fine = fine_structure(clean, noise, mode=self.border_mode)
+                    cp.copyto(sig, 0, where=invalid)
 
-                candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
-                candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
-                cp.logical_and(candidates, ~crmask, out=candidates)
-                n_new = int(cp.count_nonzero(candidates))
+                    candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
+                    candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
+                    cp.logical_and(candidates, ~crmask, out=candidates)
+                    n_new = int(cp.count_nonzero(candidates))
 
-                crmask |= candidates
+                    crmask |= candidates
 
-                log.info("Iteration %d: %d new cosmic-ray pixels", i+1, n_new)
-                if not n_new:
-                    break
+                    log.info("Iteration %d: %d new cosmic-ray pixels", i + 1, n_new)
+                    if not n_new:
+                        break
 
-                cp.logical_and(donors, ~candidates, out=donors)
-                replace(clean, crmask, donors)
+                    cp.logical_and(donors, ~candidates, out=donors)
+                    replace(clean, crmask, donors)
 
             if image.background is not None:
                 clean -= image.background

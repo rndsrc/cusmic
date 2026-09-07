@@ -34,7 +34,7 @@ def local_median(clean, donors, targets, offsets):
     cp.copyto(values, clean.dtype.type(cp.inf), where=~valid)
     values.sort(axis=1)  # Donors first, ascending; the +inf padding sorts last.
     count = cp.count_nonzero(valid, axis=1)
-    rows  = cp.arange(len(count))
+    rows = cp.arange(len(count))
     low, high = values[rows, (count - 1) // 2], values[rows, count // 2]
     return cp.where(count % 2, 0.0 + low, ((0.0 + low) + high) / 2), count > 0
 
