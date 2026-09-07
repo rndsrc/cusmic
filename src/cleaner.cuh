@@ -167,11 +167,8 @@ clean_images(const cusmic_image *ims, size_t nf, const cusmic_options &o, double
 			s.clean, s.crmask, s.excluded, s.dcount.data, s.w, s.h);
 	}
 
-	if (has_bg)
-		background<<<s.grid, s.block, 0, stream>>>(
-			s.clean, s.input.data, o.background, -1, s.n);
 	restore_image<<<s.grid, s.block, 0, stream>>>(
-		s.clean, s.crmask, s.input.data, output, mask, s.n);
+		s.clean, s.crmask, s.input.data, output, mask, o.background, s.n);
 	cuda_check(cudaGetLastError());
 	cuda_check(cudaStreamSynchronize(stream));
 }

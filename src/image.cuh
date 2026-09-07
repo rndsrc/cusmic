@@ -22,18 +22,6 @@ struct counts {
 };
 
 static __global__ void
-background(double *clean, const cusmic_image *ims, double scalar, int sign, int n)
-{
-	clean = frame(clean, n);
-	const double *map = ims[blockIdx.y].background;
-	if (!map && isnan(scalar))
-		return;
-	int i = pixel_index();
-	if (i < n)
-		clean[i] += sign * (map ? map[i] : scalar);
-}
-
-static __global__ void
 prepare_image(const cusmic_image *ims, double *clean, uint8_t *invalid, uint8_t *excluded,
 	counts *count, double scalar, int n)
 {
@@ -61,17 +49,22 @@ prepare_image(const cusmic_image *ims, double *clean, uint8_t *invalid, uint8_t 
 
 static __global__ void
 restore_image(const double *clean, const uint8_t *crmask, const cusmic_image *ims, double *out,
-	uint8_t *mask, int n)
+	uint8_t *mask, double scalar, int n)
 {
 	clean = frame(clean, n);
 	crmask = frame(crmask, n);
 	out = frame(out, n);
 	mask = frame(mask, n);
-	const double *data = ims[blockIdx.y].data;
+	const auto &im = ims[blockIdx.y];
+	const double *data = im.data;
+	const double *map = im.background;
 	int i = pixel_index();
 
 	if (i < n) {
-		out[i] = isfinite(data[i]) ? clean[i] : data[i];
+		double v = clean[i];
+		if (map || !isnan(scalar))
+			v += -1 * (map ? map[i] : scalar);
+		out[i] = isfinite(data[i]) ? v : data[i];
 		mask[i] = crmask[i];
 	}
 }
