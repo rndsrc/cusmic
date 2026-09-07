@@ -94,7 +94,8 @@ class Cleaner:
 
                 candidates = detect(sig, fine, excluded, self.contrast, self.cr_threshold)
                 candidates = grow(candidates, sig, self.cr_threshold, self.neighbor_threshold)
-                n_new = int(cp.count_nonzero(candidates & ~crmask))
+                cp.logical_and(candidates, ~crmask, out=candidates)
+                n_new = int(cp.count_nonzero(candidates))
 
                 crmask |= candidates
 
