@@ -66,7 +66,8 @@ def mkgrow(ndim=2):
     def grow(candidates, sig, cr_threshold, neighbor_threshold):
         """Grow at cosmic then neighbor thresholds; input exclusions apply to seeds."""
         for threshold in (cr_threshold, neighbor_threshold):
-            candidates = binary_dilation(candidates, structure) & (sig > threshold)
+            candidates = binary_dilation(candidates, structure)
+            cp.logical_and(candidates, sig > threshold, out=candidates)
         return candidates
 
     return grow
@@ -111,4 +112,6 @@ def fine_structure(clean, noise, mode):
 
 def detect(sig, fine, excluded, contrast, cr_threshold):
     """Select significant pixels with sufficient Laplacian contrast."""
-    return (sig > cr_threshold) & (sig / fine > contrast) & cp.logical_not(excluded)
+    ratio = fine  # Fine structure is not needed after detection.
+    cp.divide(sig, ratio, out=ratio)
+    return (sig > cr_threshold) & (ratio > contrast) & cp.logical_not(excluded)
