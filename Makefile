@@ -88,7 +88,7 @@ FITS_LIBS ?= -lcfitsio
 WARN = -Wall -Wextra -Werror
 
 $(BUILD)/io.o: src/io.c src/io.h Makefile | $(BUILD)
-	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc -c $< -o $@
+	$(CC) -std=c11 $(CFLAGS) -ffp-contract=off $(WARN) $(FITS_CFLAGS) -Isrc -c $< -o $@
 
 $(BIN):
 	mkdir -p $@

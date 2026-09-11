@@ -22,7 +22,7 @@ int
 read_fits(const char *path, const char *extension, struct fits_image *im)
 {
 	int status = 0, ndim = 0, type = 0, anynull;
-	double null = NAN;
+	double scale = 1, zero = 0, null = NAN;
 
 	fits_open_diskfile(&im->file, path, READONLY, &status);
 	if (extension)
@@ -40,6 +40,18 @@ read_fits(const char *path, const char *extension, struct fits_image *im)
 	fits_get_img_type(im->file, &type, &status);
 	if (status)
 		return status;
+	fits_read_key(im->file, TDOUBLE, "BSCALE", &scale, NULL, &status);
+	if (status == KEY_NO_EXIST)
+		status = 0;
+	fits_read_key(im->file, TDOUBLE, "BZERO", &zero, NULL, &status);
+	if (status == KEY_NO_EXIST)
+		status = 0;
+	if (status)
+		return status;
+	fits_set_bscale(im->file, 1, 0, &status);
+	if (status)
+		return status;
+
 	long w = im->axes[0], h = im->axes[1];
 	if (w <= 0 || h <= 0 || w > INT_MAX / 4 / h)
 		return BAD_DIMEN;
@@ -49,6 +61,16 @@ read_fits(const char *path, const char *extension, struct fits_image *im)
 	/* Null substitution is for integer BLANK values, not IEEE pixels. */
 	fits_read_img(
 		im->file, TDOUBLE, 1, w * h, type > 0 ? &null : NULL, im->data, &anynull, &status);
+	if (status)
+		return status;
+	if (scale != 1 || zero != 0) {
+		for (long i = 0; i < w * h; ++i) {
+			if (type > 0 && isnan(im->data[i]))
+				continue;
+			double value = im->data[i] * scale;
+			im->data[i] = value + zero;
+		}
+	}
 	return status;
 }
 
