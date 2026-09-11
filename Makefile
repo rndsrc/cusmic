@@ -1,24 +1,42 @@
 GIT_TAG = $(shell git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)
 
+.DEFAULT_GOAL := help
+
 PYTHON ?= python3
 PYTEST_ARGS ?=
 BENCH_ARGS ?=
 REFDIR ?= test/data
 BUILD ?= build/cuda
-GPU_REQUIRED ?= 0
 CHECK_PREBUILT ?= 0
 
 export PYTHONPATH := $(CURDIR)/mod:$(PYTHONPATH)
-export GPU_REQUIRED
 export CHECK_PREBUILT
 
-.PHONY: build check lint unit-test e2e-test unit e2e test mkref bench
+.PHONY: help build cuda check lint unit-test e2e-test mkref bench image clean
+
+help:
+	@printf '%s\n' \
+	    'cusmic targets:' \
+	    '  build       Compile the CUDA library and CLI; check Python syntax' \
+	    '  lint        Check Python style' \
+	    '  check       Lint and run all Python and C/CUDA checks' \
+	    '  unit-test   Run unit checks for both implementations' \
+	    '  e2e-test    Compare both implementations with reference images' \
+	    '  bench       Benchmark CPU L.A.Cosmic, CuPy, and CUDA' \
+	    '  mkref       Generate reference FITS images' \
+	    '  image       Build all five CUDA 13 images (CUDA=12 for CUDA 12)' \
+	    '              TARGET=full or TARGET=cupysmic-cuda12 selects one' \
+	    '              CUDA_ARCHS overrides the default GPU code targets' \
+	    '  clean       Remove generated files and caches'
 
 build: cuda
 	$(PYTHON) -m compileall -q mod/cusmic
 
-check: lint
-	sh test/check.sh all "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
+check:
+	@status=0; \
+	$(PYTHON) -m ruff check . || status=1; \
+	sh test/check.sh all "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS) || status=1; \
+	exit $$status
 
 lint:
 	$(PYTHON) -m ruff check .
@@ -29,24 +47,23 @@ unit-test:
 e2e-test:
 	sh test/check.sh e2e "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
 
-unit: unit-test
-e2e: e2e-test
-test: check
-
 mkref:
 	$(PYTHON) test/mkref.py $(REFDIR)
 
-bench: $(if $(filter 1,$(CHECK_PREBUILT)),,$(BUILD)/bench)
-	$(PYTHON) -m bench.run $(BENCH_ARGS)
+bench:
+	@sh tool/bench.sh "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(BENCH_ARGS)
 
 VERSION ?= $(patsubst v%,%,$(GIT_TAG))
 CUDA ?= 13
 PLATFORM ?= linux/arm64/v8
 TARGET ?= all
+CUDA_ARCHS ?=
 
-.PHONY: image
 image:
-	sh tool/image.sh "$(VERSION)" "$(CUDA)" "$(PLATFORM)" "$(TARGET)"
+	sh tool/image.sh "$(VERSION)" "$(CUDA)" "$(PLATFORM)" "$(TARGET)" "$(CUDA_ARCHS)"
+
+clean:
+	sh tool/clean.sh
 
 # CUDA keeps each float64 operation in reference order.
 BIN ?= bin
@@ -65,7 +82,6 @@ CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
     -DCUSMIC_VERSION='"$(VERSION)"'
 
 .DELETE_ON_ERROR:
-.PHONY: cuda
 cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a $(BIN)/cudasmic
 
 $(BUILD):
