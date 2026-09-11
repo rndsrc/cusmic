@@ -18,11 +18,7 @@ from dataclasses import dataclass
 from math import isfinite
 from numbers import Integral, Real
 
-import cupy as cp
-
-from .filters import detect, fine_structure, mkgrow, mklaplacian, significance
 from .image import Array, Image
-from .replace import replace
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +56,16 @@ class Cleaner:
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
         """Return independent arrays on the input device and its current stream"""
+        import cupy as cp
+
+        from .filters import (
+            detect,
+            fine_structure,
+            mkgrow,
+            mklaplacian,
+            significance,
+        )
+        from .replace import replace
 
         with image.data.device:
             if self.maxiter and image.error is None and (

@@ -14,11 +14,9 @@
 
 
 from dataclasses import dataclass
+from typing import Any
 
-import cupy as cp
-from cupy import ndarray as Array
-
-from .filters import noise_model
+Array = Any
 
 
 @dataclass
@@ -33,7 +31,9 @@ class Image:
     readnoise:      Array | float | None = None
 
     def __post_init__(self):
-        if not isinstance(self.data, Array):
+        import cupy as cp
+
+        if not isinstance(self.data, cp.ndarray):
             self.data = cp.asarray(self.data)
         if self.data.dtype != cp.float64:
             raise TypeError("data must contain float64 pixels")
@@ -69,4 +69,6 @@ class Image:
         """Given errors, else the noise model evaluated on the working image."""
         if self.error is not None:
             return self.error
+        from .filters import noise_model
+
         return noise_model(image, self.effective_gain, self.readnoise, mode)
