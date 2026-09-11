@@ -1,26 +1,35 @@
-# Tests and references
+# Tests and reference data
 
-Run from the repository root with CuPy, Astropy, Click and pytest installed:
+From the repository root on a GPU host, install the matching CuPy wheel and
+test tools, then run both Python and C/CUDA checks:
+
 ```sh
-make unit-test
-make e2e-test PYTEST_ARGS=--require-gpu GPU_REQUIRED=1
+python -m pip install '.[cuda13,test,cli]' ruff
+make                # Show targets
+make build
 make check
 ```
-These targets run Python and C/CUDA checks. Without a local CUDA compiler,
-the C/CUDA checks are skipped unless `GPU_REQUIRED=1` is set. Unavailable GPUs
-are skipped by pytest unless `--require-gpu` is given.
-A successful host run does not qualify GPU results.
 
-`data/` holds one input scene, its error map, and the L.A.Cosmic cleaned
-reference with a `CRMASK` extension. Tests, benchmarks and the demo share
-these files. Tests compare float64 bits and masks exactly.
+Use `cuda12` instead of `cuda13` with a CUDA 12 runtime. `make unit-test` and
+`make e2e-test` run the checks separately. A missing native compiler is an
+error. GPU-dependent tests fail, rather than skip,
+without a GPU; device switching also fails with only one GPU. Remaining checks
+still run and are reported.
 
-Generate candidates explicitly, then review them before replacing fixtures:
+`data/` contains one input frame, its error map, and the saved L.A.Cosmic
+reference with a `CRMASK` extension. Tests, benchmarks, and the demo use the
+same files. One host test checks the reference against pinned
+`lacosmic==1.4.0`; GPU tests compare cleaned float64 bits and masks exactly.
+A generated scaled FITS case compares the two commands pixel for pixel.
+Normal tests never regenerate the committed reference.
+
+To create *candidate* reference files for review:
+
 ```sh
-python -m pip install 'lacosmic==1.4.0'
+python -m pip install '.[test]'
 make mkref REFDIR=dist/reference
 ```
-`mkref.py` records generator settings and package versions in FITS headers
-and refuses to overwrite existing files. CPU/library differences can affect
-rounding during generation; committed files remain the test reference.
-Normal testing never regenerates them.
+
+`mkref` records generator and package versions in FITS headers and refuses
+to overwrite existing files. Reference generation may round differently
+across CPU/library builds, so use the committed files for routine checks.
