@@ -5,13 +5,16 @@ requires = ["setuptools>=80", "setuptools-scm[simple]>=8"]
 name = "cusmic"
 dynamic = ["version"]
 requires-python = ">=3.10"
-dependencies = ["cupy"]
+dependencies = []
 
 [project.optional-dependencies]
 slim = []
-cli  = ["numpy", "astropy", "click"]
-test = ["numpy", "astropy", "click", "pytest>=8.2", "lacosmic==1.4.0"]
-demo = ["numpy", "astropy", "click", "matplotlib", "jupyterlab"]
+cuda12 = ["cupy-cuda12x"]
+cuda13 = ["cupy-cuda13x"]
+cli  = ["astropy", "click"]
+bench = ["numpy", "astropy", "click", "lacosmic==1.4.0"]
+test = ["astropy", "click", "pytest>=8.2", "lacosmic==1.4.0"]
+demo = ["astropy", "click", "matplotlib", "jupyterlab"]
 
 [project.scripts]
 cupysmic = "cusmic.__main__:main"
