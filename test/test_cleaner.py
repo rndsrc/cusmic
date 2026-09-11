@@ -16,13 +16,15 @@
 import numpy as np
 import pytest
 
+SETTINGS = (3, 5, 3)
+
 
 def test_dense_patch(cp):
     from cusmic import remove_cosmics
 
     image = cp.full((15, 15), 10.0)
     image[5:10, 5:10] = 1000
-    cleaned, mask = remove_cosmics(image, error=cp.ones_like(image))
+    cleaned, mask = remove_cosmics(image, *SETTINGS, error=cp.ones_like(image))
 
     np.testing.assert_array_equal(cp.asnumpy(cleaned), 10)
     np.testing.assert_array_equal(cp.asnumpy(mask), cp.asnumpy(image == 1000))
@@ -50,7 +52,6 @@ def test_input_validation(cp):
 
 
 def test_cleaner_settings():
-    pytest.importorskip("cupy")
     from cusmic import Cleaner
 
     for settings in ({"contrast": -1}, {"cr_threshold": np.nan},
@@ -64,7 +65,7 @@ def test_zero_iterations_background(cp):
     from cusmic import remove_cosmics
 
     image = cp.full((3, 3), 0.1)
-    cleaned, mask = remove_cosmics(image, background=1e12, maxiter=0)
+    cleaned, mask = remove_cosmics(image, *SETTINGS, background=1e12, maxiter=0)
     expected = (np.full((3, 3), 0.1) + 1e12) - 1e12
     np.testing.assert_array_equal(cp.asnumpy(cleaned).view("uint64"), expected.view("uint64"))
     assert not mask.any()
@@ -79,7 +80,7 @@ def test_nonfinite_pixels(cp):
     data.view("uint64")[2, 2] = 0x7ff8000000000001  # Preserve NaN payloads too.
     original = data.copy()
     for maxiter in (0, 4):
-        clean, mask = remove_cosmics(data, error=np.ones_like(data),
+        clean, mask = remove_cosmics(data, *SETTINGS, error=np.ones_like(data),
                                       background=100, maxiter=maxiter)
         expected = data.copy()
         if maxiter:
@@ -88,7 +89,7 @@ def test_nonfinite_pixels(cp):
         assert cp.asnumpy(mask).sum() == bool(maxiter)
         np.testing.assert_array_equal(data.view("uint64"), original.view("uint64"))
     data[:] = np.nan
-    clean, mask = remove_cosmics(data, error=np.ones_like(data))
+    clean, mask = remove_cosmics(data, *SETTINGS, error=np.ones_like(data))
     np.testing.assert_array_equal(cp.asnumpy(clean).view("uint64"), data.view("uint64"))
     assert not cp.asnumpy(mask).any()
 

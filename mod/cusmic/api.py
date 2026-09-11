@@ -19,9 +19,9 @@ from .image import Image
 
 def remove_cosmics(
     data,
-    contrast=3,
-    cr_threshold=5,
-    neighbor_threshold=3,
+    contrast,
+    cr_threshold,
+    neighbor_threshold,
     error=None,
     mask=None,
     background=None,
@@ -30,7 +30,7 @@ def remove_cosmics(
     maxiter=4,
     border_mode="mirror",
 ):
-    """Remove cosmic rays with L.A.Cosmic algorithm; same signature as lacosmic.remove_cosmics()"""
+    """Remove cosmic rays on a GPU and return independent CuPy arrays."""
 
     image = Image(data, error, mask, background, effective_gain, readnoise)
     clean = Cleaner(contrast, cr_threshold, neighbor_threshold, maxiter, border_mode)
