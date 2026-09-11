@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -77,3 +78,45 @@ def test_cupy_cli_validation(cp, tmp_path):
     for options in (["--gain", "1", "--contrast", "nan"], ["--readnoise", "1"]):
         result = CliRunner().invoke(main, [str(source), str(output), *options])
         assert result.exit_code != 0 and not output.exists()
+
+
+def test_scaled_fits_cli_parity(cp, tmp_path):
+    from astropy.io import fits
+    from click.testing import CliRunner
+    from cusmic.__main__ import main
+    from cusmic.io import read_fits
+
+    native = Path(__file__).resolve().parents[1] / "bin/cudasmic"
+    if not native.exists():
+        pytest.fail("Build bin/cudasmic for cross-implementation FITS checks", pytrace=False)
+
+    data = np.ones((9, 9), dtype="int16")
+    data[4, 4] = 10000
+    hdu = fits.PrimaryHDU(data)
+    hdu.header["BSCALE"] = 0.1
+    hdu.header["BZERO"] = 10.2
+    source, error = tmp_path / "scaled.fits", tmp_path / "error.fits"
+    hdu.writeto(source)
+    fits.PrimaryHDU(np.ones(data.shape)).writeto(error)
+
+    for iterations in (0, 4):
+        python_out = tmp_path / f"cupy-{iterations}.fits"
+        cuda_out = tmp_path / f"cuda-{iterations}.fits"
+        options = ["--error", str(error), "--maxiter", str(iterations)]
+        result = CliRunner().invoke(main, [str(source), str(python_out), *options])
+        assert result.exit_code == 0, result.output
+        result = subprocess.run(
+            [str(native), str(source), str(cuda_out), *options],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+        python_pixels = read_fits(python_out)[0]
+        cuda_pixels = read_fits(cuda_out)[0]
+        np.testing.assert_array_equal(
+            python_pixels.view("uint64"), cuda_pixels.view("uint64"),
+        )
+        np.testing.assert_array_equal(
+            read_fits(python_out, ext="CRMASK")[0],
+            read_fits(cuda_out, ext="CRMASK")[0],
+        )
