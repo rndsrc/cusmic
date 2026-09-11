@@ -21,15 +21,35 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 
-def test_reference(cp):
-    from cusmic import remove_cosmics
+def reference_images():
     from cusmic.io import read_fits
 
     root = Path(__file__).parent / "data"
-    image, _ = read_fits(root / "input.fits.gz")
-    error, _ = read_fits(root / "error.fits.gz")
-    expected, _ = read_fits(root / "reference.fits.gz")
-    expected_mask, _ = read_fits(root / "reference.fits.gz", ext="CRMASK")
+    return (
+        read_fits(root / "input.fits.gz")[0],
+        read_fits(root / "error.fits.gz")[0],
+        read_fits(root / "reference.fits.gz")[0],
+        read_fits(root / "reference.fits.gz", ext="CRMASK")[0],
+    )
+
+
+def test_saved_reference_lacosmic():
+    from inspect import signature
+
+    from cusmic import remove_cosmics as gpu_remove
+    from lacosmic import remove_cosmics as cpu_remove
+
+    image, error, expected, expected_mask = reference_images()
+    assert signature(gpu_remove) == signature(cpu_remove)
+    cleaned, mask = cpu_remove(image, 1, 5, 5, error=error, maxiter=4)
+    np.testing.assert_array_equal(cleaned.view("uint64"), expected.view("uint64"))
+    np.testing.assert_array_equal(mask, expected_mask)
+
+
+def test_reference(cp):
+    from cusmic import remove_cosmics
+
+    image, error, expected, expected_mask = reference_images()
 
     cleaned, mask = remove_cosmics(
         cp.asarray(image), error=cp.asarray(error),
