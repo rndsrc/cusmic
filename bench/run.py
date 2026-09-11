@@ -23,7 +23,7 @@ def measure(backend, frames, warmups, repeats):
     command = {
         "cpu": [sys.executable, "-m", "bench.cpu"],
         "cupy": [sys.executable, "-m", "bench.bench"],
-        "cuda": [str(ROOT / "build/cuda/bench")],
+        "cuda": [os.environ.get("CUSMIC_CUDA_BENCH", str(ROOT / "build/cuda/bench"))],
     }[backend]
     command += ["--frames", str(frames), "--warmups", str(warmups),
                 "--repeats", str(repeats)]
@@ -33,7 +33,10 @@ def measure(backend, frames, warmups, repeats):
     if result.returncode:
         raise RuntimeError(f"{backend}, {frames} frame(s): {result.stderr.strip() or result.stdout.strip()}")
     record = json.loads(result.stdout)
-    if (record["backend"] != backend or record["reference_exact"] is not True or
+    shape = record["shape"]
+    measured_frames = shape[0] if len(shape) == 3 else 1
+    if (record["backend"] != backend or measured_frames != frames or
+            record["reference_exact"] is not True or
             record["warmups"] != warmups or record["repeats"] != repeats):
         raise ValueError(f"unexpected {backend} result for {frames} frame(s)")
     return record
@@ -45,20 +48,38 @@ def per_frame(record, stage, frames):
     return ms / frames
 
 
-def comparison(frames, cpu, cupy, cuda):
-    row = {"frames": frames, "cpu_first_ms_per_frame": per_frame(cpu, "first", frames)}
+def comparison(frames, records):
+    cpu = records.get("cpu")
+    cupy = records.get("cupy")
+    cuda = records.get("cuda")
+    row = {"frames": frames}
+    if cpu:
+        row["cpu_first_ms_per_frame"] = per_frame(cpu, "first", frames)
+
     for stage in STAGES:
-        a = per_frame(cupy, stage, frames)
-        b = per_frame(cuda, stage, frames)
-        row[f"cupy_{stage}_ms_per_frame"] = a
-        row[f"cuda_{stage}_ms_per_frame"] = b
-        row[f"cuda_vs_cupy_{stage}_speedup"] = a / b
+        if cupy:
+            a = per_frame(cupy, stage, frames)
+            row[f"cupy_{stage}_ms_per_frame"] = a
+        if cuda:
+            b = per_frame(cuda, stage, frames)
+            row[f"cuda_{stage}_ms_per_frame"] = b
+        if cupy and cuda:
+            row[f"cuda_vs_cupy_{stage}_speedup"] = a / b
         if stage in ("clean", "total"):
-            c = per_frame(cpu, stage, frames)
-            row[f"cpu_{stage}_ms_per_frame"] = c
-            row[f"cupy_vs_cpu_{stage}_speedup"] = c / a
-            row[f"cuda_vs_cpu_{stage}_speedup"] = c / b
+            if cpu:
+                c = per_frame(cpu, stage, frames)
+                row[f"cpu_{stage}_ms_per_frame"] = c
+            if cpu and cupy:
+                row[f"cupy_vs_cpu_{stage}_speedup"] = c / a
+            if cpu and cuda:
+                row[f"cuda_vs_cpu_{stage}_speedup"] = c / b
     return row
+
+
+def format_cell(row, key, width, decimals, suffix=""):
+    if key not in row:
+        return f"{'--':>{width}}"
+    return f"{row[key]:>{width}.{decimals}f}{suffix}"
 
 
 def main():
@@ -71,38 +92,58 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
 
     rows = []
+    failures = []
     for frames in args.frames:
         records = {}
-        for backend in ("cupy", "cuda", "cpu"):
+        for backend in ("cpu", "cupy", "cuda"):
             print(f"Measuring {backend}, {frames} frame(s)...", flush=True)
-            record = measure(backend, frames, args.warmups, args.repeats)
-            (args.output / f"{backend}-{frames}.json").write_text(
-                json.dumps(record, indent=2, sort_keys=True) + "\n")
+            path = args.output / f"{backend}-{frames}.json"
+            path.unlink(missing_ok=True)
+            try:
+                record = measure(backend, frames, args.warmups, args.repeats)
+            except (OSError, RuntimeError, ValueError, KeyError) as exc:
+                failure = dict(backend=backend, frames=frames, error=str(exc))
+                failures.append(failure)
+                print(f"Unavailable: {failure['error']}", file=sys.stderr, flush=True)
+                continue
+            path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
             records[backend] = record
-        rows.append(comparison(frames, records["cpu"], records["cupy"], records["cuda"]))
+        rows.append(comparison(frames, records))
 
     with (args.output / "comparison.csv").open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        fields = list(dict.fromkeys(key for row in rows for key in row))
+        writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
+
+    failure_path = args.output / "failures.json"
+    if failures:
+        failure_path.write_text(json.dumps(failures, indent=2) + "\n")
+    else:
+        failure_path.unlink(missing_ok=True)
 
     print("\nMedian milliseconds per frame (warmed):")
     for stage in ("clean", "total"):
         print(f"{stage.title()} calls:")
         print("Frames    CPU ms   CuPy ms   CUDA ms  CuPy/CPU  CUDA/CPU  CUDA/CuPy")
         for row in rows:
-            print(f"{row['frames']:>6}  {row[f'cpu_{stage}_ms_per_frame']:>8.3f}"
-                  f"  {row[f'cupy_{stage}_ms_per_frame']:>8.3f}"
-                  f"  {row[f'cuda_{stage}_ms_per_frame']:>8.3f}"
-                  f"  {row[f'cupy_vs_cpu_{stage}_speedup']:>11.2f}x"
-                  f"  {row[f'cuda_vs_cpu_{stage}_speedup']:>11.2f}x"
-                  f"  {row[f'cuda_vs_cupy_{stage}_speedup']:>9.2f}x")
+            print(f"{row['frames']:>6}  "
+                  f"{format_cell(row, f'cpu_{stage}_ms_per_frame', 8, 3)}  "
+                  f"{format_cell(row, f'cupy_{stage}_ms_per_frame', 8, 3)}  "
+                  f"{format_cell(row, f'cuda_{stage}_ms_per_frame', 8, 3)}  "
+                  f"{format_cell(row, f'cupy_vs_cpu_{stage}_speedup', 11, 2, 'x')}  "
+                  f"{format_cell(row, f'cuda_vs_cpu_{stage}_speedup', 11, 2, 'x')}  "
+                  f"{format_cell(row, f'cuda_vs_cupy_{stage}_speedup', 9, 2, 'x')}")
     print(f"Samples and comparison: {args.output}")
+    if failures:
+        print(f"Incomplete: {len(failures)} backend measurement(s) failed; "
+              f"details: {failure_path}", file=sys.stderr)
+    return bool(failures)
 
 
 if __name__ == "__main__":
     try:
-        main()
+        raise SystemExit(main())
     except (OSError, RuntimeError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"Benchmark failed: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
