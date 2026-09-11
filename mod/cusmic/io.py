@@ -15,7 +15,6 @@
 
 """FITS images on the host; requires the optional Astropy dependency."""
 
-import cupy as cp
 from astropy.io import fits
 
 
@@ -23,19 +22,37 @@ def read_fits(path, dtype=None, *, ext=None):
     """Return native-endian pixels and a header from a FITS image extension."""
     if isinstance(ext, str):
         ext = (ext, 1)
-    data, header = fits.getdata(path, ext=ext, header=True, memmap=False)
+    data, header = fits.getdata(
+        path, ext=ext, header=True, memmap=False,
+        do_not_scale_image_data=True, uint=False,
+    )
     if data.dtype.kind not in "iuf":
         raise TypeError(f"{path}: expected real image pixels")
-    return data.astype(dtype or data.dtype.newbyteorder("="), copy=False), header
+
+    scale = header.get("BSCALE", 1)
+    zero = header.get("BZERO", 0)
+    blank = header.get("BLANK") if data.dtype.kind in "iu" else None
+    if scale != 1 or zero != 0 or blank is not None:
+        missing = data == blank if blank is not None else None
+        pixels = data.astype("float64")
+        pixels *= scale
+        pixels += zero
+        if missing is not None:
+            pixels[missing] = float("nan")
+    else:
+        pixels = data.astype(data.dtype.newbyteorder("="), copy=False)
+
+    return pixels.astype(dtype or pixels.dtype, copy=False), header
 
 
 def write_fits(path, data, mask=None, *, header=None, overwrite=False):
     """Write pixels and an optional CRMASK; refuse overwrites by default."""
-    pixels = cp.asnumpy(data)
+    pixels = data.get() if hasattr(data, "get") else data
     header = header.copy() if header is not None else None
     if header is not None and pixels.dtype.kind == "f":
         header.pop("BLANK", None)
     hdus = [fits.PrimaryHDU(pixels, header)]
     if mask is not None:
-        hdus.append(fits.ImageHDU(cp.asnumpy(mask).astype("uint8"), name="CRMASK"))
+        flags = mask.get() if hasattr(mask, "get") else mask
+        hdus.append(fits.ImageHDU(flags.astype("uint8"), name="CRMASK"))
     fits.HDUList(hdus).writeto(path, checksum=True, overwrite=overwrite)
