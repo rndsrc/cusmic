@@ -16,21 +16,13 @@
 import pytest
 
 
-def pytest_addoption(parser):
-    parser.addoption("--require-gpu", action="store_true",
-                     help="Fail instead of skipping when CUDA is unavailable")
-
-
 @pytest.fixture(scope="session")
-def cp(request):
+def cp():
     try:
         import cupy as cp
 
         if not cp.cuda.runtime.getDeviceCount():
             raise RuntimeError("No CUDA GPU")
     except (ImportError, RuntimeError) as exc:
-        message = f"CUDA unavailable: {exc}"
-        if request.config.getoption("--require-gpu"):
-            pytest.fail(message, pytrace=False)
-        pytest.skip(message)
+        pytest.fail(f"CUDA unavailable: {exc}", pytrace=False)
     return cp

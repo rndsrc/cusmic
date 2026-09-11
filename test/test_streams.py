@@ -37,7 +37,7 @@ def test_input_device(cp):
     from cusmic import Cleaner, Image
 
     if cp.cuda.runtime.getDeviceCount() < 2:
-        pytest.skip("device switching needs two GPUs")
+        pytest.fail("device switching needs two GPUs", pytrace=False)
     device = cp.cuda.runtime.getDeviceCount() - 1
     with cp.cuda.Device(device):
         data, error = cp.full((9, 9), 10.0), cp.ones((9, 9))

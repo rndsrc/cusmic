@@ -142,6 +142,5 @@ COPY	LICENSE /usr/share/licenses/cusmic/LICENSE
 
 ENV	LD_LIBRARY_PATH=/src/build/cuda:/usr/local/lib \
 	PATH=/src/bin:$PATH \
-	CHECK_PREBUILT=1 \
-	GPU_REQUIRED=1
+	CHECK_PREBUILT=1
 ENTRYPOINT	["sh", "/src/tool/report.sh"]
