@@ -7,6 +7,7 @@ images finish their benchmarks. A speedup above one means v0.3 is faster.
 import argparse
 import json
 import math
+import re
 import statistics as stats
 from pathlib import Path
 
@@ -45,6 +46,27 @@ def compare(baseline, candidate):
         same += ("cupy", "numpy", "python")
     if any(baseline[key] != candidate[key] for key in same):
         raise ValueError("GPU, software, shape or timing settings differ")
+    old_version = baseline.get("cusmic")
+    new_version = candidate.get("cusmic")
+    if (old_version != "0.2.5" or not isinstance(new_version, str) or
+            not new_version.startswith("0.3.")):
+        raise ValueError("A/B comparison needs v0.2.5 and a v0.3 candidate")
+    before = baseline.get("source_revision")
+    after = candidate.get("source_revision")
+    if before == after or any(
+            not isinstance(revision, str) or
+            not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", revision)
+            for revision in (before, after)):
+        raise ValueError("A/B comparison needs distinct Git source revisions")
+    counts = baseline.get("detected_pixels"), candidate.get("detected_pixels")
+    if counts[0] != counts[1] or any(
+            not isinstance(n, int) or isinstance(n, bool) or n < 0
+            for n in counts):
+        raise ValueError("A/B comparison needs the same detected-pixel count")
+    if baseline["backend"] == "cupy":
+        path = baseline.get("input")
+        if not isinstance(path, str) or not path or path != candidate.get("input"):
+            raise ValueError("CuPy A/B comparison needs the same input path")
     if (baseline["dtype"] != "float64" or baseline["warmups"] != 4 or
             baseline["repeats"] != 16 or settings(baseline) != settings(candidate)):
         raise ValueError("A/B comparison requires matching float64 settings and 4/16 timing")

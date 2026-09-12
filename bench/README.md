@@ -47,5 +47,7 @@ python -m bench.ab bench/results/v025 bench/results/v03
 
 The A/B report compares resident cleaning and ordinary calls separately and
 shows all-sample spread. Both saved-scene correctness checks must pass before
-speedups are reported.
+speedups are reported. It checks release labels, Git revisions, and matched
+detection counts. v0.2.5 records lack a scene fingerprint, so keep the
+committed `test/data/` input and reference unchanged in both runs.
 On a one-GPU host, the two-device test fails explicitly; benchmarks still run.
