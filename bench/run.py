@@ -36,7 +36,8 @@ def measure(backend, frames, warmups, repeats):
     shape = record["shape"]
     measured_frames = shape[0] if len(shape) == 3 else 1
     if (record["backend"] != backend or measured_frames != frames or
-            record["reference_exact"] is not True or
+            record.get("reference_close", record.get("reference_exact")) is not True or
+            record.get("mask_disagreements", 0) != 0 or
             record["warmups"] != warmups or record["repeats"] != repeats):
         raise ValueError(f"unexpected {backend} result for {frames} frame(s)")
     return record

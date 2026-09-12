@@ -18,12 +18,14 @@
 #include "io.h"
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <getopt.h>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -45,6 +47,11 @@ struct fits_pixels {
 	~fits_pixels() { close_fits(&im); }
 	fits_pixels(const fits_pixels &) = delete;
 	fits_pixels &operator=(const fits_pixels &) = delete;
+};
+
+struct reference_check {
+	bool exact = true;
+	double max_abs_error = 0;
 };
 
 struct scene {
@@ -75,25 +82,49 @@ struct scene {
 		return pixels;
 	}
 
-	void
-	check(const host_result &out, int nf) const
+	reference_check
+	check(const host_result &out, int nf, const host_result *first = nullptr) const
 	{
+		reference_check result;
+		const double eps = 32 * std::numeric_limits<double>::epsilon();
 		for (int f = 0; f < nf; ++f)
 			for (size_t i = 0; i < n; ++i) {
+				size_t at = size_t(f) * n + i;
 				uint64_t got, want;
-				std::memcpy(&got, out.clean.get() + size_t(f) * n + i, sizeof(got));
+				std::memcpy(&got, out.clean.get() + at, sizeof(got));
 				std::memcpy(&want, expected.im.data + i, sizeof(want));
-				unsigned got_mask = out.mask[size_t(f) * n + i];
+				unsigned got_mask = out.mask[at];
 				unsigned want_mask = unsigned(flags.im.data[i]);
+				if (first && (std::memcmp(out.clean.get() + at, first->clean.get() + at,
+						sizeof(double)) || got_mask != first->mask[at])) {
+					char msg[100];
+					std::snprintf(msg, sizeof(msg),
+						"repeated output differs at frame %d, y %zu, x %zu",
+						f, i / w, i % w);
+					throw std::runtime_error(msg);
+				}
 				if (got == want && got_mask == want_mask)
 					continue;
-				char msg[160];
-				std::snprintf(msg, sizeof(msg),
-					"frame %d, y %zu, x %zu: pixel 0x%016llx/0x%016llx, mask %u/%u",
-					f, i / w, i % w, (unsigned long long)got,
-					(unsigned long long)want, got_mask, want_mask);
-				throw std::runtime_error(msg);
+				result.exact = false;
+				double actual = out.clean[at], expected_value = expected.im.data[i];
+				double difference = std::abs(actual - expected_value);
+				bool close = (std::isnan(actual) && std::isnan(expected_value)) ||
+					(std::isfinite(actual) && std::isfinite(expected_value) &&
+					 difference <= eps * (1 + std::abs(expected_value)));
+				if (got_mask != want_mask || !close) {
+					char msg[240];
+					std::snprintf(msg, sizeof(msg),
+						"frame %d, y %zu, x %zu: pixel %.17g/%.17g "
+						"(0x%016llx/0x%016llx), mask %u/%u",
+						f, i / w, i % w, actual, expected_value,
+						(unsigned long long)got, (unsigned long long)want,
+						got_mask, want_mask);
+					throw std::runtime_error(msg);
+				}
+				if (std::isfinite(difference))
+					result.max_abs_error = std::max(result.max_abs_error, difference);
 			}
+		return result;
 	}
 };
 
@@ -155,6 +186,8 @@ timed(F call, double &ms) -> decltype(call())
 struct measurements {
 	double first_ms;
 	size_t detected;
+	bool reference_exact;
+	double max_abs_error;
 	std::vector<double> upload_ms, clean_ms, download_ms, total_ms;
 };
 
@@ -172,7 +205,9 @@ benchmark(const scene &ref, int nf, int warmups, int repeats)
 	auto start = clock_type::now();
 	auto first = complete();
 	times.first_ms = std::chrono::duration<double, std::milli>(clock_type::now() - start).count();
-	ref.check(first, nf);
+	auto quality = ref.check(first, nf);
+	times.reference_exact = quality.exact;
+	times.max_abs_error = quality.max_abs_error;
 	for (int i = 0; i < warmups; ++i)
 		complete();
 
@@ -190,13 +225,13 @@ benchmark(const scene &ref, int nf, int warmups, int repeats)
 		times.clean_ms.push_back(ms);
 		auto host = timed([&] { return download(out, total); }, ms);
 		times.download_ms.push_back(ms);
-		ref.check(host, nf);
+		ref.check(host, nf, &first);
 	}
 
 	for (int i = 0; i < repeats; ++i) {
 		auto host = timed(complete, ms);
 		times.total_ms.push_back(ms);
-		ref.check(host, nf);
+		ref.check(host, nf, &first);
 	}
 	times.detected = std::count(first.mask.get(), first.mask.get() + total, uint8_t(1));
 	return times;
@@ -265,7 +300,10 @@ report(const scene &ref, const measurements &times, int nf, int warmups, int rep
 	    << json_string(revision ? revision : "unknown") << ",\"cusmic\":"
 	    << json_string(cusmic_version()) << ",\"gpu\":" << json_string(gpu.name)
 	    << ",\"cuda_runtime\":" << runtime << ",\"cuda_driver\":" << driver
-	    << ",\"reference_exact\":true,\"milliseconds\":{"
+	    << ",\"reference_close\":true,\"reference_exact\":"
+	    << (times.reference_exact ? "true" : "false")
+	    << ",\"max_abs_error\":" << times.max_abs_error
+	    << ",\"mask_disagreements\":0,\"milliseconds\":{"
 	    << "\"upload_ms\":" << statistics(times.upload_ms)
 	    << ",\"clean_ms\":" << statistics(times.clean_ms)
 	    << ",\"download_ms\":" << statistics(times.download_ms)

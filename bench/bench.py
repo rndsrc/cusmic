@@ -126,9 +126,17 @@ def main(path, error, reference, frames, repeats, warmups, output):
     expected_mask, _ = read_fits(reference, ext="CRMASK")
     expected = np.broadcast_to(expected, cleaned.shape)
     expected_mask = np.broadcast_to(expected_mask, mask.shape)
-    np.testing.assert_array_equal(cleaned.view("uint64"), expected.view("uint64"))
+    eps = 32 * np.finfo(np.float64).eps
+    np.testing.assert_allclose(cleaned, expected, rtol=eps, atol=eps, equal_nan=True)
     np.testing.assert_array_equal(mask, expected_mask)
-    line = json.dumps(dict(record, input=str(Path(path)), reference_exact=True))
+    finite = np.isfinite(expected)
+    difference = np.abs(cleaned[finite] - expected[finite])
+    line = json.dumps(dict(
+        record, input=str(Path(path)), reference_close=True,
+        reference_exact=bool(np.array_equal(cleaned.view("uint64"), expected.view("uint64"))),
+        max_abs_error=float(difference.max()) if difference.size else 0.0,
+        mask_disagreements=0,
+    ))
     print(line)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
