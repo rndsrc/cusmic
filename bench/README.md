@@ -22,9 +22,10 @@ completed measurements even when a backend fails; unavailable timings
 are marked in the comparison table.
 
 Each backend checks its pixels and mask against the saved reference outside
-the timed interval. GPU records retain both bitwise agreement and the
-32-epsilon pixel comparison used after arithmetic reordering; saved-scene masks
-must still match exactly. JSON files hold all samples and hardware details;
+the timed interval. GPU records retain both bitwise agreement and the finite
+pixel check `abs(cleaned-reference) <= 32*eps*(1+abs(reference))`, with `eps`
+the float64 machine epsilon; saved-scene masks must still match exactly.
+JSON files hold all samples and hardware details;
 `comparison.csv` contains available per-frame medians and speedups;
 `failures.json` identifies missing backends. Output is written
 to the ignored `bench/results/` directory by default, or to `/data/results`

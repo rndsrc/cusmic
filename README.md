@@ -3,10 +3,11 @@
 L.A.Cosmic cosmic-ray removal in CuPy and CUDA C/C++. The v0.2.x releases
 preserve float64 operation order and match the saved L.A.Cosmic reference bit
 for bit. v0.3.x uses a fused Laplacian with the same mathematical stencil but
-different rounding; well-separated reference detections must still match and
-cleaned pixels are checked within 32 floating-point epsilons. Threshold ties
-may change after rounding. L.A.Cosmic supplies the CPU reference and benchmark;
-cusmic has no CPU cleaner.
+different rounding; well-separated reference detections must still match.
+For finite reference pixels, the check is
+`abs(cleaned-reference) <= 32*eps*(1+abs(reference))`, with `eps` the float64
+machine epsilon. Threshold ties may change after rounding. L.A.Cosmic supplies
+the CPU benchmark and reference; cusmic has no CPU cleaner.
 
 ## Install and use
 
