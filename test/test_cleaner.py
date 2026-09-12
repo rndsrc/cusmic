@@ -30,6 +30,23 @@ def test_dense_patch(cp):
     np.testing.assert_array_equal(cp.asnumpy(mask), cp.asnumpy(image == 1000))
 
 
+@pytest.mark.parametrize("mode", ("mirror", "reflect", "nearest", "wrap", "constant"))
+def test_laplacian_borders(cp, mode):
+    from cupyx.scipy.ndimage import convolve
+    from cusmic.filters import mklaplacian
+
+    kernel = cp.asarray([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype="float64")
+    for pixels in ([[12, -4, 20]], [[12], [-4], [20]], [[12, -4], [20, 0]]):
+        image = cp.asarray(pixels, dtype="float64")
+        sampled = cp.repeat(cp.repeat(image / 4, 2, axis=0), 2, axis=1)
+        lap2 = cp.maximum(convolve(sampled, kernel, mode=mode), 0)
+        expected = (lap2[0::2, 0::2] + lap2[0::2, 1::2]) + (
+            lap2[1::2, 0::2] + lap2[1::2, 1::2]
+        )
+        actual = mklaplacian(image.shape, image.dtype, mode)(image)
+        np.testing.assert_array_equal(cp.asnumpy(actual), cp.asnumpy(expected))
+
+
 def test_input_validation(cp):
     from cusmic import Cleaner, Image
 

@@ -110,6 +110,35 @@ main(void)
 			goto out;
 		}
 	}
+	{
+		double probe[9], cleaned[9];
+		uint8_t detected[9];
+		cusmic_image one = {};
+		for (int i = 0; i < 9; ++i)
+			probe[i] = i == 4 ? 1000 : 10;
+		one.data = probe;
+		one.error = error;
+		for (int axis = 0; axis < 2; ++axis) {
+			one.width = axis ? 1 : 9;
+			one.height = axis ? 9 : 1;
+			for (int mode = CUSMIC_REFLECT; mode <= CUSMIC_WRAP; ++mode) {
+				o.border = mode;
+				if (remove_cosmics(&one, &o, cleaned, detected, msg, sizeof(msg))) {
+					std::fprintf(stderr, "singleton border %d: %s\n", mode, msg);
+					goto out;
+				}
+				for (int i = 0; i < 9; ++i) {
+					bool want = i == 4 || (mode == CUSMIC_CONSTANT &&
+							(i == 0 || i == 1 || i == 7 || i == 8));
+					if (cleaned[i] != 10 || bool(detected[i]) != want) {
+						std::fprintf(stderr, "singleton border %d, pixel %d differs\n",
+							mode, i);
+						goto out;
+					}
+				}
+			}
+		}
+	}
 	puts("distinct device frames match independent calls on caller stream");
 	ret = 0;
 out:
