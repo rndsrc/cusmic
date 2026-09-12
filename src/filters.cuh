@@ -70,24 +70,16 @@ median(const double *a, double *out, int w, int h, int mode)
 }
 
 static __device__ double
-supersample(const double *clean, int x, int y, int w, int h, int mode)
+sample(const double *clean, int x, int y, int w, int h, int mode)
 {
-	x = border_index(x, 2 * w, mode);
-	y = border_index(y, 2 * h, mode);
-	return x < 0 || y < 0 ? 0 : clean[(y / 2) * w + x / 2] / 4;
+	x = border_index(x, w, mode);
+	y = border_index(y, h, mode);
+	return x < 0 || y < 0 ? 0 : clean[y * w + x];
 }
 
-/* Sample the replicated image without storing it; retain each rounded
- * operation. */
 static __device__ double
-laplacian_at(const double *clean, int x, int y, int w, int h, int mode)
+positive(double v)
 {
-	double v = 0;
-	v -= supersample(clean, x, y - 1, w, h, mode);
-	v -= supersample(clean, x - 1, y, w, h, mode);
-	v += 4 * supersample(clean, x, y, w, h, mode);
-	v -= supersample(clean, x + 1, y, w, h, mode);
-	v -= supersample(clean, x, y + 1, w, h, mode);
 	return v < 0 ? 0 : v;
 }
 
@@ -99,13 +91,17 @@ laplacian(const double *clean, double *lap, int w, int h, int mode)
 	int i = pixel_index();
 	if (i >= w * h)
 		return;
-	int x = 2 * (i % w), y = 2 * (i / w);
-	double a = laplacian_at(clean, x, y, w, h, mode);
-	double b = laplacian_at(clean, x + 1, y, w, h, mode);
-	double c = laplacian_at(clean, x, y + 1, w, h, mode);
-	double d = laplacian_at(clean, x + 1, y + 1, w, h, mode);
-	/* The reference sums singleton-width columns from left to right. */
-	lap[i] = w == 1 ? ((a + b) + c) + d : (a + b) + (c + d);
+	int x = i % w, y = i / w;
+	/* At a replicated edge, mirror and reflect sample the edge pixel. */
+	if (mode == CUSMIC_MIRROR || mode == CUSMIC_REFLECT)
+		mode = CUSMIC_NEAREST;
+	double c = clean[i] / 4;
+	double up = c - sample(clean, x, y - 1, w, h, mode) / 4;
+	double down = c - sample(clean, x, y + 1, w, h, mode) / 4;
+	double left = c - sample(clean, x - 1, y, w, h, mode) / 4;
+	double right = c - sample(clean, x + 1, y, w, h, mode) / 4;
+	lap[i] = (positive(up + left) + positive(up + right)) +
+		 (positive(down + left) + positive(down + right));
 }
 
 static __global__ void
