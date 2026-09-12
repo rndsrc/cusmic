@@ -19,8 +19,10 @@ still run and are reported.
 `data/` contains one input frame, its error map, and the saved L.A.Cosmic
 reference with a `CRMASK` extension. Tests, benchmarks, and the demo use the
 same files. One host test checks the reference against pinned
-`lacosmic==1.4.0`; GPU tests compare cleaned float64 bits and masks exactly.
-A generated scaled FITS case compares the two commands pixel for pixel.
+`lacosmic==1.4.0`; GPU tests allow 32 float64 epsilons of cleaned-pixel
+rounding and require the saved mask exactly. The generated scaled FITS case
+checks both commands: zero iterations remain bitwise equal, while cleaned
+pixels may differ within the same tolerance.
 Normal tests never regenerate the committed reference.
 
 To create *candidate* reference files for review:

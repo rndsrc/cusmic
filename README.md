@@ -1,8 +1,12 @@
 # cusmic
 
-L.A.Cosmic cosmic-ray removal in CuPy and CUDA C/C++. Both GPU implementations
-are checked against saved float64 L.A.Cosmic pixels and masks. L.A.Cosmic is
-installed for reference checks and CPU benchmarks; cusmic has no CPU cleaner.
+L.A.Cosmic cosmic-ray removal in CuPy and CUDA C/C++. The v0.2.x releases
+preserve float64 operation order and match the saved L.A.Cosmic reference bit
+for bit. v0.3.x uses a fused Laplacian with the same mathematical stencil but
+different rounding; well-separated reference detections must still match and
+cleaned pixels are checked within 32 floating-point epsilons. Threshold ties
+may change after rounding. L.A.Cosmic supplies the CPU reference and benchmark;
+cusmic has no CPU cleaner.
 
 ## Install and use
 
@@ -66,8 +70,10 @@ checks still run. `make bench` measures CPU L.A.Cosmic, CuPy, and CUDA for 1,
 4, and 16 frames with four warmups and sixteen samples. It writes a report of
 completed measurements and backend failures. On a CPU-only host, install
 `.[bench]` and run `python -m bench.cpu --frames 1` to measure L.A.Cosmic
-alone. See [test/README.md](test/README.md) and [bench/README.md](bench/README.md)
-for the fixtures and result files.
+alone. Compare v0.2.5 and a v0.3 candidate on the same GPU with
+`python -m bench.ab BASELINE_RESULTS CANDIDATE_RESULTS`. See
+[test/README.md](test/README.md) and [bench/README.md](bench/README.md)
+for the fixtures and timing boundaries.
 
 ## Docker images
 
