@@ -14,49 +14,48 @@
 
 
 import cupy as cp
-from cupyx.scipy.ndimage import binary_dilation, convolve, median_filter
+from cupyx.scipy.ndimage import binary_dilation, median_filter
 
 ORDER = 5     # median filter
 FLOOR = 0.01  # fine structure floor
 NOISE = 1e-5  # median floor in the noise model (eq 10)
 
 
-def mklaplacian(shape, dtype, mode):
-    ny, nx = shape[-2:]
-    ndim = len(shape)
+# Mirror and reflect both select the edge pixel of a 2x-replicated image.
+PAD = {
+    "mirror": "edge",
+    "reflect": "edge",
+    "nearest": "edge",
+    "wrap": "wrap",
+    "constant": "constant",
+}
 
-    # Discrete Laplacian for the 2x2-replicated image (paper eq 4);
-    # the paper's factor 1/4 is supplied by the flux-conserving
-    # replication.
-    kernel = cp.asarray([
-        [ 0,-1, 0],
-        [-1, 4,-1],
-        [ 0,-1, 0],
-    ], dtype=dtype).reshape((1,) * (ndim - 2) + (3, 3))
-    sampled = cp.empty((*shape[:-2], 2 * ny, 2 * nx), dtype=dtype)
-    lap2 = cp.empty_like(sampled)
+
+@cp.fuse()
+def lap4(c, up, down, left, right):
+    """Sum the four positive Laplacians of each replicated pixel (eq 4)."""
+    c, up, down, left, right = (c / 4, up / 4, down / 4, left / 4, right / 4)
+    ul = cp.maximum((c - up) + (c - left), 0)
+    ur = cp.maximum((c - up) + (c - right), 0)
+    dl = cp.maximum((c - down) + (c - left), 0)
+    dr = cp.maximum((c - down) + (c - right), 0)
+    return (ul + ur) + (dl + dr)
+
+
+def mklaplacian(shape, dtype, mode):
+    pad = [(0, 0)] * (len(shape) - 2) + [(1, 1), (1, 1)]
+    border = PAD[mode]
 
     def laplacian(image):
-        blocks = sampled.reshape(*shape[:-2], ny, 2, nx, 2)
-        cp.divide(image[..., :, None, :, None], 4, out=blocks)
-        convolve(sampled, kernel, mode=mode, output=lap2)
-        cp.maximum(lap2, 0, out=lap2)
-
-        # Keep the reference's summation order, including single columns.
-        a, b = lap2[..., 0::2, 0::2], lap2[..., 0::2, 1::2]
-        c, d = lap2[..., 1::2, 0::2], lap2[..., 1::2, 1::2]
-
-        # Convolution is done; two quarters of sampled now hold the sums.
-        lap = sampled.ravel()[:image.size].reshape(image.shape)
-        cp.add(a, b, out=lap)
-        if nx == 1:
-            cp.add(lap, c, out=lap)
-            cp.add(lap, d, out=lap)
-        else:
-            tmp = sampled.ravel()[image.size:2 * image.size].reshape(image.shape)
-            cp.add(c, d, out=tmp)
-            cp.add(lap, tmp, out=lap)
-        return lap
+        image = image.astype(dtype, copy=False)
+        p = cp.pad(image, pad, mode=border)
+        return lap4(
+            image,
+            p[..., :-2, 1:-1],
+            p[..., 2:, 1:-1],
+            p[..., 1:-1, :-2],
+            p[..., 1:-1, 2:],
+        )
 
     return laplacian
 
