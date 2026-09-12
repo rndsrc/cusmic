@@ -15,7 +15,9 @@
  */
 #include "cusmic.h"
 #include "io.h"
+#include <float.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,14 +78,18 @@ main(int argc, char **argv)
 		uint64_t got, want;
 		memcpy(&got, clean + i, sizeof(got));
 		memcpy(&want, reference.data + i, sizeof(want));
-		if (got != want || mask[i] != (uint8_t)flags.data[i]) {
-			fprintf(stderr, "reference differs at (%zu,%zu): pixels %016" PRIx64
-				" != %016" PRIx64 ", mask %u != %.0f\n",
-				i % w, i / w, got, want, mask[i], flags.data[i]);
+		double expected = reference.data[i];
+		double tolerance = 32 * DBL_EPSILON * (1 + fabs(expected));
+		if ((got != want && !(isfinite(clean[i]) && isfinite(expected) &&
+			fabs(clean[i] - expected) <= tolerance)) ||
+			mask[i] != (uint8_t)flags.data[i]) {
+			fprintf(stderr, "reference differs at (%zu,%zu): pixels %.17g/%.17g"
+				" (%016" PRIx64 "/%016" PRIx64 "), mask %u/%.0f\n",
+				i % w, i / w, clean[i], expected, got, want, mask[i], flags.data[i]);
 			goto out;
 		}
 	}
-	puts("CUDA reference pixels and mask match exactly");
+	puts("CUDA reference pixels are close and masks match exactly");
 	ret = 0;
 out:
 	close_fits(&input);

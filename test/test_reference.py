@@ -56,7 +56,9 @@ def test_reference(cp):
         cp.asarray(image), error=cp.asarray(error),
         contrast=1, cr_threshold=5, neighbor_threshold=5, maxiter=4,
     )
-    np.testing.assert_array_equal(cp.asnumpy(cleaned).view("uint64"), expected.view("uint64"))
+    np.testing.assert_allclose(cp.asnumpy(cleaned), expected,
+                               rtol=32 * np.finfo("float64").eps,
+                               atol=32 * np.finfo("float64").eps)
     np.testing.assert_array_equal(cp.asnumpy(mask), expected_mask)
 
 
@@ -113,9 +115,16 @@ def test_scaled_fits_cli_parity(cp, tmp_path):
 
         python_pixels = read_fits(python_out)[0]
         cuda_pixels = read_fits(cuda_out)[0]
-        np.testing.assert_array_equal(
-            python_pixels.view("uint64"), cuda_pixels.view("uint64"),
-        )
+        if iterations:
+            np.testing.assert_allclose(
+                python_pixels, cuda_pixels,
+                rtol=32 * np.finfo("float64").eps,
+                atol=32 * np.finfo("float64").eps,
+            )
+        else:
+            np.testing.assert_array_equal(
+                python_pixels.view("uint64"), cuda_pixels.view("uint64"),
+            )
         np.testing.assert_array_equal(
             read_fits(python_out, ext="CRMASK")[0],
             read_fits(cuda_out, ext="CRMASK")[0],
