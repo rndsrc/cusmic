@@ -142,3 +142,9 @@ def test_replacement_batches(cp, monkeypatch):
     assert cleaned is data
     np.testing.assert_array_equal(cp.asnumpy(cleaned), [[0, 0, 0, 30, 60, 60, 60]])
     assert replace(data, cp.zeros(data.shape, dtype=bool), donors) is data
+
+    high = np.finfo("float64").max
+    data = cp.asarray([[high, 0, high]])
+    donors = cp.asarray([[True, False, True]])
+    replace(data, ~donors, donors)
+    np.testing.assert_array_equal(cp.asnumpy(data), np.full((1, 3), high))
