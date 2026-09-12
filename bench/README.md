@@ -34,3 +34,18 @@ GPU timings wait for completion and separate first use, upload, resident
 cleaning, download, and ordinary total. CPU cleaning and total use the same
 ordinary calls. Separately timed stages need not add up to total because
 each timing has its own setup.
+
+To measure an optimization, run the v0.2.5 and candidate full images on the
+same GPU and CUDA runtime, writing each result to a different directory:
+
+```sh
+mkdir -p bench/results/v025 bench/results/v03
+docker run --rm --gpus all -v "$PWD/bench/results/v025:/data/results" rndsrc/cusmic:0.2.5
+docker run --rm --gpus all -v "$PWD/bench/results/v03:/data/results" rndsrc/cusmic:0.3.0-rc1
+python -m bench.ab bench/results/v025 bench/results/v03
+```
+
+The A/B report compares resident cleaning and ordinary calls separately and
+shows all-sample spread. Both saved-scene correctness checks must pass before
+speedups are reported.
+On a one-GPU host, the two-device test fails explicitly; benchmarks still run.
