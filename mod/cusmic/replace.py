@@ -19,6 +19,12 @@ RADIUS = 2  # replacement window is 5x5 (paper sec 3.1)
 BUDGET = 1 << 18  # Gathered values per batch; at least one window is needed.
 
 
+@cp.fuse()
+def midpoint(low, high):
+    small = (cp.abs(low) < 1) & (cp.abs(high) < 1)
+    return cp.where(small, (low + high) / 2, low / 2 + high / 2)
+
+
 def local_median(clean, donors, targets, offsets):
     """Median of each clipped window; also report which windows have donors."""
     ny, nx = clean.shape[-2:]
@@ -36,7 +42,7 @@ def local_median(clean, donors, targets, offsets):
     count = cp.count_nonzero(valid, axis=1)
     rows = cp.arange(len(count))
     low, high = values[rows, (count - 1) // 2], values[rows, count // 2]
-    return cp.where(count % 2, 0.0 + low, ((0.0 + low) + high) / 2), count > 0
+    return cp.where(count % 2, 0.0 + low, midpoint(low, high)), count > 0
 
 
 def replace(clean, crmask, donors):

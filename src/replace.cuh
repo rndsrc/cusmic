@@ -47,6 +47,14 @@ value(unsigned long long k)
 	return __longlong_as_double((long long)(k >> 63 ? k ^ (1ull << 63) : ~k));
 }
 
+static __device__ double
+midpoint(double lo, double hi)
+{
+	if (fabs(lo) < 1 && fabs(hi) < 1)
+		return (lo + hi) / 2;
+	return lo / 2 + hi / 2;
+}
+
 /* Each replacement target owns a complete warp, including inactive lanes. */
 static __device__ int
 warp_sum(int count)
@@ -139,7 +147,7 @@ replace(double *clean, const uint8_t *crmask, const uint8_t *excluded, const cou
 			hi = n % 2 ? lo : select_donor(clean, crmask, excluded, win, w, n / 2);
 		}
 		if (!lane)
-			clean[i] = n % 2 ? 0.0 + lo : ((0.0 + lo) + hi) / 2;
+			clean[i] = n % 2 ? 0.0 + lo : midpoint(lo, hi);
 		return;
 	}
 }
