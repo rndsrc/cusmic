@@ -1,27 +1,27 @@
-#!/bin/sh
+#!/bin/bash
 # Write check and benchmark reports even when one fails.
-set -eu
+set -euo pipefail
 
 cd /src
 mkdir -p /data/results
 
+echo "Running checks..."
 check_status=0
 if sh test/check.sh all python /usr/local/cuda/bin/nvcc build/cuda \
-    > /data/results/check.log 2>&1; then
+    2>&1 | tee /data/results/check.log; then
     :
 else
     check_status=$?
 fi
-cat /data/results/check.log
 
+echo "Running benchmarks..."
 bench_status=0
 if python -m bench.run --frames 1 4 16 --warmups 4 --repeats 16 \
-    --output /data/results > /data/results/bench.log 2>&1; then
+    --output /data/results "$@" 2>&1 | tee /data/results/bench.log; then
     :
 else
     bench_status=$?
 fi
-cat /data/results/bench.log
 
 printf 'checks=%s\nbenchmarks=%s\n' "$check_status" "$bench_status" \
     | tee /data/results/status.txt

@@ -1,5 +1,5 @@
 # One build matrix controls toolkit/CuPy pins, GPU code targets and image tags.
-variable "VERSION" { default = "local" }
+variable "VERSION" { default = "0.0.0.dev0" }
 variable "REVISION" { default = "dev" }
 variable "PLATFORM" { default = "linux/arm64/v8" }
 variable "CUDA_ARCHS" { default = "" }
