@@ -26,8 +26,13 @@ extern "C" {
 enum cusmic_border { CUSMIC_REFLECT, CUSMIC_CONSTANT, CUSMIC_NEAREST, CUSMIC_MIRROR, CUSMIC_WRAP };
 enum cusmic_status { CUSMIC_OK, CUSMIC_INVALID, CUSMIC_CUDA_ERROR, CUSMIC_NO_MEMORY };
 
-/* Contiguous float64 pixels and optional per-pixel maps. Error overrides
- * gain and read noise. Mask bytes are zero/nonzero; nonfinite pixels survive.
+/* Contiguous float64 pixels and optional maps of width * height elements.
+ * Error (positive 1-sigma, in image units) overrides gain and read noise.
+ * Gain is positive electrons/image unit; read noise is nonnegative electrons.
+ * Background is added before cleaning and subtracted afterward, in image units.
+ * Calibration values must be finite. Mask bytes exclude seeds and donors,
+ * but detections can grow into masked pixels. Nonfinite input pixels survive
+ * unchanged and are never flagged.
  */
 struct cusmic_image {
 	const double *data, *error;
@@ -41,18 +46,19 @@ struct cusmic_options {
 	double contrast, cr_threshold, neighbor_threshold;
 	double gain; /* L.A.Cosmic: effective_gain. */
 	double readnoise, background;
-	int maxiter;
+	int maxiter; /* Nonnegative; zero disables detection, not background arithmetic. */
 	int border; /* L.A.Cosmic: border_mode, selected by cusmic_border. */
 };
 
-/* Initialize before overriding fields; NaN means no background or unset gain.
- */
 const char *
 cusmic_version(void);
 
 int
 cusmic_cuda_version(void);
 
+/* Initialize before overriding fields; defaults match the CLI.
+ * NaN means no scalar background or unset scalar gain. Maps override scalars.
+ */
 void
 cusmic_default_options(struct cusmic_options *options);
 

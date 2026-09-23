@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Cleaner:
-    """Reusable detection settings"""
+    """Reusable detection settings; call with an Image to get pixels and a mask."""
 
     contrast:           float = 3
     cr_threshold:       float = 5
@@ -55,7 +55,7 @@ class Cleaner:
             raise ValueError(f"border_mode must be one of {', '.join(modes)}")
 
     def __call__(self, image: Image) -> tuple[Array, Array]:
-        """Return independent arrays on the input device and its current stream"""
+        """Return independent arrays on the input device's current stream."""
         import cupy as cp
 
         from .filters import (
