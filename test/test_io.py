@@ -1,9 +1,11 @@
-"""Host FITS edge cases and GPU CLI input checks."""
+"""FITS edge cases and CLI input checks that need no GPU."""
 
 import numpy as np
 import pytest
 from astropy.io import fits
 from cusmic.io import read_fits, write_fits
+
+pytestmark = pytest.mark.host
 
 
 def test_integer_blank(tmp_path):
@@ -56,7 +58,7 @@ def test_float64_fits_pixels(tmp_path):
 
 
 @pytest.mark.parametrize("data", [None, np.zeros((2, 3, 3))])
-def test_cli_rejects_invalid_images(cp, tmp_path, data):
+def test_cli_rejects_invalid_images(tmp_path, data):
     from click.testing import CliRunner
     from cusmic.__main__ import main
 

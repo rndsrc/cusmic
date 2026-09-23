@@ -35,6 +35,7 @@ def reference_images():
     )
 
 
+@pytest.mark.host
 def test_saved_reference_lacosmic():
     from inspect import signature
 
