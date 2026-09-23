@@ -88,7 +88,7 @@ Python environment so dependencies and input paths stay fixed:
 
 ```sh
 git worktree add --detach ../cusmic-a v0.2.6
-git worktree add --detach ../cusmic-b v0.3.0
+git worktree add --detach ../cusmic-b v0.3.1
 for side in a b; do
     python -m pip install --no-deps -e "../cusmic-$side"
     policy=exact
@@ -134,14 +134,14 @@ differences or pauses.
 ## Docker
 
 Only the full image includes tests and benchmark tools.
-Build it with `make container TARGET=full VERSION=0.3.0-dev`.
+Build it with `make container TARGET=full VERSION=0.3.1-dev`.
 The default command runs checks and then benchmarks, saving both logs
 and `status.txt`:
 
 ```sh
 mkdir -p results
 docker run --rm --gpus all -e CUSMIC_REFERENCE=close \
-    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.0-dev
+    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.1-dev
 ```
 
 Use `exact` for v0.2.x.  Append benchmark options after the image name, such as
@@ -149,7 +149,7 @@ Use `exact` for v0.2.x.  Append benchmark options after the image name, such as
 
 ```sh
 docker run --rm --gpus all -e CUSMIC_REFERENCE=close --entrypoint python \
-    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.0-dev \
+    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.1-dev \
     -m bench.run --output /data/results --frames 1 4 16
 ```
 
@@ -164,24 +164,32 @@ profiles, platforms, and host driver requirements.
 
 NVIDIA GB10, a 512 × 512 float64 reference image, four warmups, and
 sixteen measured calls.
-These are historical v0.2.5 measurements; v0.2.6 retains its exact
-cleaning algorithms.
-Values are median milliseconds per frame.
+Values below are median milliseconds per frame.
 GPU complete calls include allocation, upload, cleaning, and download;
 disk I/O is excluded.
-The CPU ran L.A.Cosmic 1.4.0, and CuPy was 14.2 with CUDA 13.0.2.
+The CPU ran L.A.Cosmic 1.4, and CuPy was 14.2 with CUDA 13.0.2.
 
-| Frames | CPU L.A.Cosmic | Exact CuPy | Exact CUDA |
-| ---: | ---: | ---: | ---: |
-|  1 | 680.481 | 10.190 | 6.629 |
-|  4 | 683.897 |  9.614 | 6.252 |
-| 16 | 680.504 |  9.800 | 6.658 |
+| Frames | CPU L.A.Cosmic | v0.2.5 CuPy | v0.3.0 CuPy | v0.2.5 CUDA | v0.3.0 CUDA |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+|  1 | 680.481 | 10.190 | 9.732 | 6.629 | 6.547 |
+|  4 | 683.897 |  9.614 | 8.592 | 6.252 | 6.041 |
+| 16 | 680.504 |  9.800 | 8.907 | 6.658 | 6.553 |
 
-Outputs matched the saved pixels and masks bit for bit.
-The initial 16-frame CuPy run had unexplained pauses: its mean was
-12.313 ms/frame despite the lower median.
+These historical runs measured v0.2.5 (exact) and v0.3.0 (close).
+v0.2.6 and v0.3.1 retain their respective cleaning algorithms.
+Although the optimized line permits rounding, these outputs matched
+the saved pixels and masks bit for bit.
+
+The initial 16-frame CuPy runs had unexplained pauses:
+means were 12.313 and 14.095 ms/frame despite the lower optimized
+median.
+An ABBA ABBA repeat used four warmups and sixteen samples in each run.
+Across 64 samples per implementation, mean complete-call time fell
+from 9.257 ± 0.099 to 8.518 ± 0.093 ms/frame (mean ± sample SD), or
+**8.0% less time**.
 First-use and separate transfer timings remain in the original
 benchmark reports.
+
 These measurements predate the shared-tool rebuild; fresh GPU runs
-are required to qualify the rebuilt release.
-The original single-GPU run could not pass the two-GPU check.
+are required to qualify the rebuilt releases.
+The original single-GPU runs could not pass the two-GPU check.

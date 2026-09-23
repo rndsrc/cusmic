@@ -125,16 +125,19 @@ CPU-only benchmarks need `.[bench]` and no CUDA installation.
 Historical GB10 results for a 512 × 512 float64 frame, with four
 warmups and sixteen samples; median milliseconds per frame:
 
-| Frames | CPU L.A.Cosmic | Exact CuPy | Exact CUDA |
-| ---: | ---: | ---: | ---: |
-|  1 | 680.481 | 10.190 | 6.629 |
-|  4 | 683.897 |  9.614 | 6.252 |
-| 16 | 680.504 |  9.800 | 6.658 |
+| Frames | CPU L.A.Cosmic | v0.2.5 CuPy | v0.3.0 CuPy | v0.2.5 CUDA | v0.3.0 CUDA |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+|  1 | 680.481 | 10.190 | 9.732 | 6.629 | 6.547 |
+|  4 | 683.897 |  9.614 | 8.592 | 6.252 | 6.041 |
+| 16 | 680.504 |  9.800 | 8.907 | 6.658 | 6.553 |
 
 GPU calls include allocation and transfers, with disk I/O excluded.
-The measurements used v0.2.5; v0.2.6 preserves those exact algorithms.
+v0.2.6 and v0.3.1 retain the corresponding exact and close algorithms.
+All measured outputs matched the saved pixels and masks bit for bit.
+A repeated 16-frame CuPy comparison found 8.0% less mean complete-call
+time for v0.3.0, after unexplained pauses in the initial runs.
 See the [benchmark report](bench/README.md#recorded-gb10-measurements)
-for the environment, timing spread, and validation limits.
+for the environment, sample spread, and validation limits.
 
 ## Docker images
 
@@ -144,8 +147,8 @@ pass `--gpus all` to run GPU code.
 Build all five roles or select the combined test/benchmark image:
 
 ```sh
-make container VERSION=0.3.0-dev
-make container VERSION=0.3.0-dev TARGET=full
+make container VERSION=0.3.1-dev
+make container VERSION=0.3.1-dev TARGET=full
 ```
 
 | Role | Tag | Contents |
@@ -168,7 +171,7 @@ when none matches; overrides must be valid Python versions.
 ```sh
 mkdir -p results
 docker run --rm --gpus all -e CUSMIC_REFERENCE=close \
-    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.0-dev
+    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.1-dev
 ```
 
 The full image runs checks followed by benchmarks, continuing after
