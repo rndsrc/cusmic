@@ -17,7 +17,7 @@ CuPy already installed? `python -m pip install .` leaves it alone. Add `cli`
 for the FITS command, and `test` or `bench` only when you need them:
 
 ```sh
-python -m pip install '.[cuda13,cli,test,bench]' ruff
+python -m pip install -e '.[cuda13,cli,test,bench]' ruff
 ```
 
 ```python

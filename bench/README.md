@@ -4,7 +4,7 @@ On a GPU host, install the matching CuPy wheel and pinned CPU comparator,
 build CUDA C/C++, then measure all three implementations:
 
 ```sh
-python -m pip install '.[cuda13,bench]'
+python -m pip install -e '.[cuda13,bench]'
 make build
 make bench
 ```

@@ -4,7 +4,7 @@ From the repository root on a GPU host, install the matching CuPy wheel and
 test tools, then run both Python and C/CUDA checks:
 
 ```sh
-python -m pip install '.[cuda13,test,cli]' ruff
+python -m pip install -e '.[cuda13,test,cli]' ruff
 make                # Show targets
 make build
 make check

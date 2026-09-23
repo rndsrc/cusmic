@@ -29,6 +29,10 @@
 #include <sstream>
 #include <vector>
 
+#ifndef CUSMIC_REVISION
+#define CUSMIC_REVISION "unknown"
+#endif
+
 using clock_type = std::chrono::steady_clock;
 
 struct fits_pixels {
@@ -290,7 +294,6 @@ report(const scene &ref, const measurements &times, int nf, int warmups, int rep
 	cuda_check(cudaGetDeviceProperties(&gpu, device));
 	cuda_check(cudaRuntimeGetVersion(&runtime));
 	cuda_check(cudaDriverGetVersion(&driver));
-	const char *revision = std::getenv("CUSMIC_REVISION");
 	const auto &o = ref.options;
 	std::ostringstream out;
 	out << std::setprecision(12) << "{\"backend\":\"cuda\",\"dtype\":\"float64\",\"shape\":[";
@@ -303,7 +306,7 @@ report(const scene &ref, const measurements &times, int nf, int warmups, int rep
 	    << o.contrast << ",\"cr_threshold\":" << o.cr_threshold
 	    << ",\"neighbor_threshold\":" << o.neighbor_threshold << ",\"maxiter\":"
 	    << o.maxiter << "},\"source_revision\":"
-	    << json_string(revision ? revision : "unknown") << ",\"cusmic\":"
+	    << json_string(CUSMIC_REVISION) << ",\"cusmic\":"
 	    << json_string(cusmic_version()) << ",\"gpu\":" << json_string(gpu.name)
 	    << ",\"cuda_runtime\":" << runtime << ",\"cuda_driver\":" << driver
 	    << ",\"reference_mode\":" << json_string(ref.mode)

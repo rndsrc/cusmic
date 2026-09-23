@@ -23,7 +23,6 @@ cupysmic = "cusmic.__main__:main"
 where = ["mod"]
 
 [tool.pytest.ini_options]
-pythonpath = ["mod"]
 testpaths = ["test"]
 markers = [
     "e2e: compare the public API and CLI against the saved reference",

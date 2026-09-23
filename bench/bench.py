@@ -4,11 +4,14 @@ import json
 import os
 import platform
 import subprocess
+from importlib.metadata import distribution
 from pathlib import Path
 from time import perf_counter
+from urllib.parse import unquote, urlparse
 
 import click
 import cupy as cp
+import cusmic
 import numpy as np
 from cusmic import Cleaner, Image, __version__
 from cusmic.io import read_fits
@@ -18,18 +21,24 @@ DATA = ROOT / "test/data"
 
 
 def source_info():
-    revision = os.environ.get("CUSMIC_REVISION", "unknown")
+    """Identify the installed package, never infer it from the benchmark checkout."""
+    direct = json.loads(distribution("cusmic").read_text("direct_url.json") or "{}")
+    revision = direct.get("vcs_info", {}).get("commit_id", "unknown")
     dirty = None
-    if (ROOT / ".git").exists():
+    if direct.get("dir_info", {}).get("editable"):
+        root = unquote(urlparse(direct["url"]).path)
         try:
             revision = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
             dirty = bool(subprocess.check_output(
                 ["git", "status", "--porcelain", "--untracked-files=no"],
-                cwd=ROOT, text=True))
+                cwd=root, text=True))
         except (OSError, subprocess.CalledProcessError):
             pass
-    return dict(source_revision=revision, source_dirty=dirty)
+    elif revision == "unknown":
+        revision = os.environ.get("CUSMIC_REVISION", "unknown")
+    return dict(source_revision=revision, source_dirty=dirty,
+                package_path=str(Path(cusmic.__file__).resolve()))
 
 
 def timed(call):

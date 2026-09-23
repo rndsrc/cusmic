@@ -27,17 +27,14 @@ def measure(backend, frames, warmups, repeats):
     }[backend]
     command += ["--frames", str(frames), "--warmups", str(warmups),
                 "--repeats", str(repeats)]
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "mod") + os.pathsep + env.get("PYTHONPATH", "")
-    result = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
     if result.returncode:
         raise RuntimeError(f"{backend}, {frames} frame(s): {result.stderr.strip() or result.stdout.strip()}")
     record = json.loads(result.stdout)
     shape = record["shape"]
     measured_frames = shape[0] if len(shape) == 3 else 1
     if (record["backend"] != backend or measured_frames != frames or
-            record.get("reference_close", record.get("reference_exact")) is not True or
-            record.get("mask_disagreements", 0) != 0 or
+            record["reference_exact"] is not True or
             record["warmups"] != warmups or record["repeats"] != repeats):
         raise ValueError(f"unexpected {backend} result for {frames} frame(s)")
     return record
@@ -85,6 +82,8 @@ def format_cell(row, key, width, decimals, suffix=""):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--backends", nargs="+", choices=("cpu", "cupy", "cuda"),
+                        default=["cpu", "cupy", "cuda"])
     parser.add_argument("--frames", type=positive_int, nargs="+", default=[1, 4, 16])
     parser.add_argument("--warmups", type=positive_int, default=4)
     parser.add_argument("--repeats", type=positive_int, default=16)
@@ -96,7 +95,7 @@ def main():
     failures = []
     for frames in args.frames:
         records = {}
-        for backend in ("cpu", "cupy", "cuda"):
+        for backend in args.backends:
             print(f"Measuring {backend}, {frames} frame(s)...", flush=True)
             path = args.output / f"{backend}-{frames}.json"
             path.unlink(missing_ok=True)

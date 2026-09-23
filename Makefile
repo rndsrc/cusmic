@@ -1,18 +1,20 @@
-GIT_TAG = $(shell git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null || echo v0.0.0.dev0)
+SRC ?= src
+GIT_TAG = $(shell git -C "$(SRC)" describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null || echo v0.0.0.dev0)
 
 .DEFAULT_GOAL := help
 
 PYTHON ?= python3
 PYTEST_ARGS ?=
 BENCH_ARGS ?=
+BACKENDS ?= cpu cupy cuda
 REFERENCE ?= exact
 REFDIR ?= test/data
 BUILD ?= build/cuda
 CHECK_PREBUILT ?= 0
 
-export PYTHONPATH := $(CURDIR)/mod:$(PYTHONPATH)
 export CUSMIC_REFERENCE := $(REFERENCE)
 export CHECK_PREBUILT
+export CUSMIC_CUDA_CLI = $(BIN)/cudasmic
 
 .PHONY: help build cuda check lint unit e2e ref bench container clean
 
@@ -35,6 +37,7 @@ help:
 	    'Options:' \
 	    '  REFERENCE=exact|close   Pixel policy for checks/benchmarks (default: exact)' \
 	    '  PYTEST_ARGS="..."      Extra pytest arguments for check/unit/e2e' \
+	    '  BACKENDS="cpu cupy"    Benchmark selection (default: cpu cupy cuda)' \
 	    '  BENCH_ARGS="..."       Benchmark sizes, repetitions, and output directory' \
 	    '  REFDIR=PATH            Reference directory (default: test/data); no overwrite' \
 	    '  CUDA_ARCHS="87 121"    GPU code targets for local or container builds' \
@@ -45,6 +48,7 @@ help:
 	    '' \
 	    'Examples:' \
 	    '  make check REFERENCE=exact' \
+	    '  make bench BACKENDS=cpu BENCH_ARGS="--frames 1 --warmups 1 --repeats 2"' \
 	    '  make container TARGET=full VERSION=0.0.0.dev0' \
 	    '' \
 	    'See README.md, test/README.md, and bench/README.md for prerequisites.'
@@ -71,7 +75,7 @@ ref:
 	$(PYTHON) test/mkref.py "$(REFDIR)"
 
 bench:
-	@sh tool/bench.sh "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(BENCH_ARGS)
+	@sh tool/bench.sh "$(PYTHON)" "$(NVCC)" "$(BUILD)" "$(BACKENDS)" $(BENCH_ARGS)
 
 VERSION ?= $(patsubst v%,%,$(GIT_TAG))
 CUDA ?= 13
@@ -85,14 +89,14 @@ container:
 clean:
 	sh tool/clean.sh
 
-# CUDA keeps each float64 operation in reference order.
+# Do not introduce implicit FMA contractions.
 BIN ?= bin
 CUDA_PATH ?= /usr/local/cuda
 NVCC ?= $(CUDA_PATH)/bin/nvcc
 CUDA_ARCH ?= 75
 NVCCFLAGS ?= -O2
-REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
-CUDA_HEADERS = $(wildcard src/*.h src/*.cuh)
+REVISION ?= $(shell git -C "$(SRC)" rev-parse HEAD 2>/dev/null || echo unknown)
+CUDA_HEADERS = $(wildcard $(SRC)/*.h $(SRC)/*.cuh)
 CUDA_GENCODE = $(foreach arch,$(or $(CUDA_ARCHS),$(CUDA_ARCH)),\
     -gencode arch=compute_$(arch),code=\"sm_$(arch),compute_$(arch)\")
 CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
@@ -106,8 +110,8 @@ cuda: $(BUILD)/libcusmic.so $(BUILD)/libcusmic.a $(BIN)/cudasmic
 $(BUILD):
 	mkdir -p $@
 
-$(BUILD)/api.o: src/api.cu $(CUDA_HEADERS) Makefile | $(BUILD)
-	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc -c $< -o $@
+$(BUILD)/api.o: $(SRC)/api.cu $(CUDA_HEADERS) Makefile | $(BUILD)
+	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -I$(SRC) -c $< -o $@
 
 $(BUILD)/libcusmic.so: $(BUILD)/api.o
 	$(NVCC) --shared --cudart=static $< -o $@
@@ -122,21 +126,21 @@ FITS_CFLAGS ?=
 FITS_LIBS ?= -lcfitsio
 WARN = -Wall -Wextra -Werror
 
-$(BUILD)/io.o: src/io.c src/io.h Makefile | $(BUILD)
-	$(CC) -std=c11 $(CFLAGS) -ffp-contract=off $(WARN) $(FITS_CFLAGS) -Isrc -c $< -o $@
+$(BUILD)/io.o: $(SRC)/io.c $(SRC)/io.h Makefile | $(BUILD)
+	$(CC) -std=c11 $(CFLAGS) -ffp-contract=off $(WARN) $(FITS_CFLAGS) -I$(SRC) -c $< -o $@
 
 $(BIN):
 	mkdir -p $@
 
-$(BIN)/cudasmic: src/main.c src/cusmic.h src/io.h $(BUILD)/io.o $(BUILD)/libcusmic.so | $(BIN)
-	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< $(BUILD)/io.o \
+$(BIN)/cudasmic: $(SRC)/main.c $(SRC)/cusmic.h $(SRC)/io.h $(BUILD)/io.o $(BUILD)/libcusmic.so | $(BIN)
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -I$(SRC) $< $(BUILD)/io.o \
 	    -L$(BUILD) -lcusmic $(FITS_LIBS) -lm -Wl,-rpath,'$$ORIGIN/../$(BUILD)' -o $@
 	strip --strip-unneeded $@
 
 # Compare the C API with the saved float64 reference pixels and mask.
-$(BUILD)/test_reference: test/test_reference.c src/cusmic.h src/io.h \
+$(BUILD)/test_reference: test/test_reference.c $(SRC)/cusmic.h $(SRC)/io.h \
     $(BUILD)/io.o $(BUILD)/libcusmic.so
-	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< $(BUILD)/io.o \
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -I$(SRC) $< $(BUILD)/io.o \
 	    -L$(BUILD) -lcusmic $(FITS_LIBS) -lm -Wl,-rpath,'$$ORIGIN' -o $@
 
 .PHONY: cuda-reference-check
@@ -144,24 +148,25 @@ cuda-reference-check: $(BUILD)/test_reference
 	$(BUILD)/test_reference
 
 # Invalid host calls must leave caller-owned outputs unchanged.
-$(BUILD)/test_api: test/test_api.c src/cusmic.h $(BUILD)/libcusmic.so
-	$(CC) -std=c11 $(CFLAGS) $(WARN) -Isrc $< -L$(BUILD) -lcusmic -lm \
+$(BUILD)/test_api: test/test_api.c $(SRC)/cusmic.h $(BUILD)/libcusmic.so
+	$(CC) -std=c11 $(CFLAGS) $(WARN) -I$(SRC) $< -L$(BUILD) -lcusmic -lm \
 	    -Wl,-rpath,'$$ORIGIN' -o $@
 
 # Generated FITS cases need no CUDA device or saved fixture.
-$(BUILD)/test_io: test/test_io.c src/io.h $(BUILD)/io.o
-	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -Isrc $< \
+$(BUILD)/test_io: test/test_io.c $(SRC)/io.h $(BUILD)/io.o
+	$(CC) -std=c11 $(CFLAGS) $(WARN) $(FITS_CFLAGS) -I$(SRC) $< \
 	    $(BUILD)/io.o $(FITS_LIBS) -lm -o $@
 
 # Distinct frames and caller-stream handoff use the public device C API.
-$(BUILD)/test_batch: test/test_batch.cu src/cusmic.h $(CUDA_HEADERS) \
+$(BUILD)/test_batch: test/test_batch.cu $(SRC)/cusmic.h $(CUDA_HEADERS) \
     $(BUILD)/libcusmic.so
-	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc $< -L$(BUILD) -lcusmic \
+	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -I$(SRC) $< -L$(BUILD) -lcusmic \
 	    -Xlinker=-rpath,'$$ORIGIN' -o $@
 
 # The CUDA benchmark uses the same FITS scene and timing fields as bench.py.
-$(BUILD)/bench: bench/bench.cu src/cusmic.h src/io.h $(CUDA_HEADERS) \
+$(BUILD)/bench: bench/bench.cu $(SRC)/cusmic.h $(SRC)/io.h $(CUDA_HEADERS) \
     $(BUILD)/io.o $(BUILD)/libcusmic.so
-	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -Isrc $(FITS_CFLAGS) $< \
+	$(NVCC) $(CUDA_FLAGS) $(NVCCFLAGS) -DCUSMIC_REVISION='"$(REVISION)"' \
+	    -I$(SRC) $(FITS_CFLAGS) $< \
 	    $(BUILD)/io.o -L$(BUILD) -lcusmic $(FITS_LIBS) \
 	    -Xlinker=-rpath,'$$ORIGIN' -o $@
