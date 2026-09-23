@@ -13,6 +13,9 @@
 # limitations under the License.
 
 
+import os
+
+import numpy as np
 import pytest
 
 
@@ -26,3 +29,21 @@ def cp():
     except (ImportError, RuntimeError) as exc:
         pytest.fail(f"CUDA unavailable: {exc}", pytrace=False)
     return cp
+
+
+@pytest.fixture(scope="session")
+def assert_pixels():
+    mode = os.environ.get("CUSMIC_REFERENCE", "exact")
+    if mode not in ("exact", "close"):
+        pytest.fail("CUSMIC_REFERENCE must be exact or close", pytrace=False)
+
+    def compare(actual, expected, exact=False):
+        if exact or mode == "exact":
+            np.testing.assert_array_equal(actual.view("uint64"), expected.view("uint64"))
+        else:
+            special = ~np.isfinite(expected)
+            np.testing.assert_array_equal(
+                actual[special].view("uint64"), expected[special].view("uint64"))
+            eps = 32 * np.finfo("float64").eps
+            np.testing.assert_allclose(actual, expected, rtol=eps, atol=eps)
+    return compare

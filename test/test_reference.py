@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -47,7 +48,7 @@ def test_saved_reference_lacosmic():
     np.testing.assert_array_equal(mask, expected_mask)
 
 
-def test_reference(cp):
+def test_reference(cp, assert_pixels):
     from cusmic import remove_cosmics
 
     image, error, expected, expected_mask = reference_images()
@@ -56,9 +57,7 @@ def test_reference(cp):
         cp.asarray(image), error=cp.asarray(error),
         contrast=1, cr_threshold=5, neighbor_threshold=5, maxiter=4,
     )
-    np.testing.assert_allclose(cp.asnumpy(cleaned), expected,
-                               rtol=32 * np.finfo("float64").eps,
-                               atol=32 * np.finfo("float64").eps)
+    assert_pixels(cp.asnumpy(cleaned), expected)
     np.testing.assert_array_equal(cp.asnumpy(mask), expected_mask)
 
 
@@ -82,13 +81,14 @@ def test_cupy_cli_validation(cp, tmp_path):
         assert result.exit_code != 0 and not output.exists()
 
 
-def test_scaled_fits_cli_parity(cp, tmp_path):
+def test_scaled_fits_cli_parity(cp, tmp_path, assert_pixels):
     from astropy.io import fits
     from click.testing import CliRunner
     from cusmic.__main__ import main
     from cusmic.io import read_fits
 
-    native = Path(__file__).resolve().parents[1] / "bin/cudasmic"
+    native = Path(__file__).resolve().parents[1] / os.environ.get(
+        "CUSMIC_CUDA_CLI", "bin/cudasmic")
     if not native.exists():
         pytest.fail("Build bin/cudasmic for cross-implementation FITS checks", pytrace=False)
 
@@ -115,16 +115,7 @@ def test_scaled_fits_cli_parity(cp, tmp_path):
 
         python_pixels = read_fits(python_out)[0]
         cuda_pixels = read_fits(cuda_out)[0]
-        if iterations:
-            np.testing.assert_allclose(
-                python_pixels, cuda_pixels,
-                rtol=32 * np.finfo("float64").eps,
-                atol=32 * np.finfo("float64").eps,
-            )
-        else:
-            np.testing.assert_array_equal(
-                python_pixels.view("uint64"), cuda_pixels.view("uint64"),
-            )
+        assert_pixels(python_pixels, cuda_pixels, exact=iterations == 0)
         np.testing.assert_array_equal(
             read_fits(python_out, ext="CRMASK")[0],
             read_fits(cuda_out, ext="CRMASK")[0],

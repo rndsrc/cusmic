@@ -5,11 +5,13 @@ GIT_TAG = $(shell git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/nul
 PYTHON ?= python3
 PYTEST_ARGS ?=
 BENCH_ARGS ?=
+REFERENCE ?= exact
 REFDIR ?= test/data
 BUILD ?= build/cuda
 CHECK_PREBUILT ?= 0
 
 export PYTHONPATH := $(CURDIR)/mod:$(PYTHONPATH)
+export CUSMIC_REFERENCE := $(REFERENCE)
 export CHECK_PREBUILT
 
 .PHONY: help build cuda check lint unit-test e2e-test mkref bench image clean

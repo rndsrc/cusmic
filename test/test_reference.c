@@ -35,6 +35,16 @@ main(int argc, char **argv)
 	uint8_t *mask = NULL;
 	char path[1024], msg[256];
 	int ret = 1, status;
+	const char *mode = getenv("CUSMIC_REFERENCE");
+	int exact = 1;
+	double max_error = 0;
+
+	if (!mode)
+		mode = "exact";
+	if (strcmp(mode, "exact") && strcmp(mode, "close")) {
+		fprintf(stderr, "CUSMIC_REFERENCE must be exact or close\n");
+		return 1;
+	}
 
 	for (size_t i = 0; i < 3; ++i) {
 		if (snprintf(path, sizeof(path), "%s/%s", dir, names[i]) >= (int)sizeof(path))
@@ -80,16 +90,24 @@ main(int argc, char **argv)
 		memcpy(&want, reference.data + i, sizeof(want));
 		double expected = reference.data[i];
 		double tolerance = 32 * DBL_EPSILON * (1 + fabs(expected));
-		if ((got != want && !(isfinite(clean[i]) && isfinite(expected) &&
-			fabs(clean[i] - expected) <= tolerance)) ||
+		double diff = fabs(clean[i] - expected);
+		int close = got == want || (isfinite(clean[i]) && isfinite(expected) &&
+			diff <= tolerance);
+		if (!close || (!strcmp(mode, "exact") && got != want) ||
 			mask[i] != (uint8_t)flags.data[i]) {
-			fprintf(stderr, "reference differs at (%zu,%zu): pixels %.17g/%.17g"
+			fprintf(stderr, "%s reference differs at (%zu,%zu): pixels %.17g/%.17g"
 				" (%016" PRIx64 "/%016" PRIx64 "), mask %u/%.0f\n",
-				i % w, i / w, clean[i], expected, got, want, mask[i], flags.data[i]);
+				mode, i % w, i / w, clean[i], expected, got, want, mask[i],
+				flags.data[i]);
 			goto out;
 		}
+		if (got != want)
+			exact = 0;
+		if (isfinite(diff) && diff > max_error)
+			max_error = diff;
 	}
-	puts("CUDA reference pixels are close and masks match exactly");
+	printf("CUDA reference (%s): pixels %s, mask exact, max error %.17g\n",
+		mode, exact ? "exact" : "close", max_error);
 	ret = 0;
 out:
 	close_fits(&input);

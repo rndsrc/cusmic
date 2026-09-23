@@ -116,6 +116,9 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
 @click.option("--output", type=click.Path(path_type=Path), help="Append a JSON record to this file.")
 def main(path, error, reference, frames, repeats, warmups, output):
     """Benchmark the saved L.A.Cosmic example; disk I/O is outside warmed timings."""
+    mode = os.environ.get("CUSMIC_REFERENCE", "exact")
+    if mode not in ("exact", "close"):
+        raise click.ClickException("CUSMIC_REFERENCE must be exact or close")
     data, _ = read_fits(path, dtype="float64")
     noise, _ = read_fits(error, dtype="float64")
     if frames > 1:
@@ -127,12 +130,18 @@ def main(path, error, reference, frames, repeats, warmups, output):
     expected = np.broadcast_to(expected, cleaned.shape)
     expected_mask = np.broadcast_to(expected_mask, mask.shape)
     eps = 32 * np.finfo(np.float64).eps
-    np.testing.assert_allclose(cleaned, expected, rtol=eps, atol=eps, equal_nan=True)
+    if mode == "exact":
+        np.testing.assert_array_equal(cleaned.view("uint64"), expected.view("uint64"))
+    else:
+        special = ~np.isfinite(expected)
+        np.testing.assert_array_equal(
+            cleaned[special].view("uint64"), expected[special].view("uint64"))
+        np.testing.assert_allclose(cleaned, expected, rtol=eps, atol=eps, equal_nan=True)
     np.testing.assert_array_equal(mask, expected_mask)
     finite = np.isfinite(expected)
     difference = np.abs(cleaned[finite] - expected[finite])
     line = json.dumps(dict(
-        record, input=str(Path(path)), reference_close=True,
+        record, input=str(Path(path)), reference_mode=mode, reference_close=True,
         reference_exact=bool(np.array_equal(cleaned.view("uint64"), expected.view("uint64"))),
         max_abs_error=float(difference.max()) if difference.size else 0.0,
         mask_disagreements=0,

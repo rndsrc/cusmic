@@ -33,3 +33,10 @@ make mkref REFDIR=dist/reference
 `mkref` records generator and package versions in FITS headers and refuses
 to overwrite existing files. Reference generation may round differently
 across CPU/library builds, so use the committed files for routine checks.
+
+The default `REFERENCE=exact` requires identical float64 bits.
+Use `make check REFERENCE=close` to permit finite errors up to
+`32 * eps * (1 + abs(reference))`, with float64 epsilon.
+Masks and nonfinite pixel bits still match exactly.
+Direct Python and Docker commands use `CUSMIC_REFERENCE=exact|close`;
+use the same policy for tests and benchmarks.

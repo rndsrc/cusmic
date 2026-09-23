@@ -58,11 +58,17 @@ struct scene {
 	fits_pixels input, error, expected, flags;
 	cusmic_options options;
 	size_t w, h, n;
+	const char *mode;
 
 	scene(const char *path, const char *noise, const char *reference)
 	    : input(path), error(noise), expected(reference), flags(reference, "CRMASK"),
 	      w(input.im.axes[0]), h(input.im.axes[1]), n(w * h)
 	{
+		mode = std::getenv("CUSMIC_REFERENCE");
+		if (!mode)
+			mode = "exact";
+		if (std::strcmp(mode, "exact") && std::strcmp(mode, "close"))
+			throw std::invalid_argument("CUSMIC_REFERENCE must be exact or close");
 		for (const auto *im : {&error.im, &expected.im, &flags.im})
 			if (im->axes[0] != long(w) || im->axes[1] != long(h))
 				throw std::invalid_argument("reference shapes differ");
@@ -108,15 +114,15 @@ struct scene {
 				result.exact = false;
 				double actual = out.clean[at], expected_value = expected.im.data[i];
 				double difference = std::abs(actual - expected_value);
-				bool close = (std::isnan(actual) && std::isnan(expected_value)) ||
+				bool close = got == want ||
 					(std::isfinite(actual) && std::isfinite(expected_value) &&
 					 difference <= eps * (1 + std::abs(expected_value)));
-				if (got_mask != want_mask || !close) {
+				if (got_mask != want_mask || !close || !std::strcmp(mode, "exact")) {
 					char msg[240];
 					std::snprintf(msg, sizeof(msg),
-						"frame %d, y %zu, x %zu: pixel %.17g/%.17g "
+						"%s reference, frame %d, y %zu, x %zu: pixel %.17g/%.17g "
 						"(0x%016llx/0x%016llx), mask %u/%u",
-						f, i / w, i % w, actual, expected_value,
+						mode, f, i / w, i % w, actual, expected_value,
 						(unsigned long long)got, (unsigned long long)want,
 						got_mask, want_mask);
 					throw std::runtime_error(msg);
@@ -300,6 +306,7 @@ report(const scene &ref, const measurements &times, int nf, int warmups, int rep
 	    << json_string(revision ? revision : "unknown") << ",\"cusmic\":"
 	    << json_string(cusmic_version()) << ",\"gpu\":" << json_string(gpu.name)
 	    << ",\"cuda_runtime\":" << runtime << ",\"cuda_driver\":" << driver
+	    << ",\"reference_mode\":" << json_string(ref.mode)
 	    << ",\"reference_close\":true,\"reference_exact\":"
 	    << (times.reference_exact ? "true" : "false")
 	    << ",\"max_abs_error\":" << times.max_abs_error
