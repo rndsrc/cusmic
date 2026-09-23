@@ -10,8 +10,8 @@ make build
 make check
 ```
 
-Use `cuda12` instead of `cuda13` with a CUDA 12 runtime. `make unit-test` and
-`make e2e-test` run the checks separately. A missing native compiler is an
+Use `cuda12` instead of `cuda13` with a CUDA 12 runtime. `make unit` and
+`make e2e` run the checks separately. A missing native compiler is an
 error. GPU-dependent tests fail, rather than skip,
 without a GPU; device switching also fails with only one GPU. Remaining checks
 still run and are reported.
@@ -27,10 +27,10 @@ To create *candidate* reference files for review:
 
 ```sh
 python -m pip install '.[test]'
-make mkref REFDIR=dist/reference
+make ref REFDIR=dist/reference
 ```
 
-`mkref` records generator and package versions in FITS headers and refuses
+`ref` records generator and package versions in FITS headers and refuses
 to overwrite existing files. Reference generation may round differently
 across CPU/library builds, so use the committed files for routine checks.
 

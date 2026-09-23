@@ -1,4 +1,4 @@
-GIT_TAG = $(shell git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)
+GIT_TAG = $(shell git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null || echo v0.0.0.dev0)
 
 .DEFAULT_GOAL := help
 
@@ -14,22 +14,40 @@ export PYTHONPATH := $(CURDIR)/mod:$(PYTHONPATH)
 export CUSMIC_REFERENCE := $(REFERENCE)
 export CHECK_PREBUILT
 
-.PHONY: help build cuda check lint unit-test e2e-test mkref bench image clean
+.PHONY: help build cuda check lint unit e2e ref bench container clean
 
 help:
 	@printf '%s\n' \
-	    'cusmic targets:' \
+	    'Usage: make [target] [VARIABLE=value ...]' \
+	    '' \
+	    'Targets:' \
+	    '  help        Show this help (default)' \
 	    '  build       Compile the CUDA library and CLI; check Python syntax' \
-	    '  lint        Check Python style' \
-	    '  check       Lint and run all Python and C/CUDA checks' \
-	    '  unit-test   Run unit checks for both implementations' \
-	    '  e2e-test    Compare both implementations with reference images' \
+	    '  lint        Check Python style with Ruff' \
+	    '  check       Run lint, unit, and end-to-end checks' \
+	    '  unit        Run Python and C/CUDA unit checks' \
+	    '  e2e         Compare APIs and CLIs with reference images' \
 	    '  bench       Benchmark CPU L.A.Cosmic, CuPy, and CUDA' \
-	    '  mkref       Generate reference FITS images' \
-	    '  image       Build all five CUDA 13 images (CUDA=12 for CUDA 12)' \
-	    '              TARGET=full or TARGET=cupysmic-cuda12 selects one' \
-	    '              CUDA_ARCHS overrides the default GPU code targets' \
-	    '  clean       Remove generated files and caches'
+	    '  ref         Generate reference FITS images in test/data/' \
+	    '  container   Build all five container roles for CUDA 13' \
+	    '  clean       Remove builds, benchmark results, and caches' \
+	    '' \
+	    'Options:' \
+	    '  REFERENCE=exact|close   Pixel policy for checks/benchmarks (default: exact)' \
+	    '  PYTEST_ARGS="..."      Extra pytest arguments for check/unit/e2e' \
+	    '  BENCH_ARGS="..."       Benchmark sizes, repetitions, and output directory' \
+	    '  REFDIR=PATH            Reference directory (default: test/data); no overwrite' \
+	    '  CUDA_ARCHS="87 121"    GPU code targets for local or container builds' \
+	    '  CUDA=12               Container CUDA profile (default: 13)' \
+	    '  TARGET=full           Container role (default: all)' \
+	    '  VERSION=0.0.0.dev0     Version (default: exact Git tag or 0.0.0.dev0)' \
+	    '  PLATFORM=linux/amd64   Container platform (default: linux/arm64/v8)' \
+	    '' \
+	    'Examples:' \
+	    '  make check REFERENCE=exact' \
+	    '  make container TARGET=full VERSION=0.0.0.dev0' \
+	    '' \
+	    'See README.md, test/README.md, and bench/README.md for prerequisites.'
 
 build: cuda
 	$(PYTHON) -m compileall -q mod/cusmic
@@ -43,14 +61,14 @@ check:
 lint:
 	$(PYTHON) -m ruff check .
 
-unit-test:
+unit:
 	sh test/check.sh unit "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
 
-e2e-test:
+e2e:
 	sh test/check.sh e2e "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(PYTEST_ARGS)
 
-mkref:
-	$(PYTHON) test/mkref.py $(REFDIR)
+ref:
+	$(PYTHON) test/mkref.py "$(REFDIR)"
 
 bench:
 	@sh tool/bench.sh "$(PYTHON)" "$(NVCC)" "$(BUILD)" $(BENCH_ARGS)
@@ -61,7 +79,7 @@ PLATFORM ?= linux/arm64/v8
 TARGET ?= all
 CUDA_ARCHS ?=
 
-image:
+container:
 	sh tool/image.sh "$(VERSION)" "$(CUDA)" "$(PLATFORM)" "$(TARGET)" "$(CUDA_ARCHS)"
 
 clean:
@@ -72,11 +90,10 @@ BIN ?= bin
 CUDA_PATH ?= /usr/local/cuda
 NVCC ?= $(CUDA_PATH)/bin/nvcc
 CUDA_ARCH ?= 75
-CUDA_ARCHS ?= $(CUDA_ARCH)
 NVCCFLAGS ?= -O2
 REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 CUDA_HEADERS = $(wildcard src/*.h src/*.cuh)
-CUDA_GENCODE = $(foreach arch,$(CUDA_ARCHS),\
+CUDA_GENCODE = $(foreach arch,$(or $(CUDA_ARCHS),$(CUDA_ARCH)),\
     -gencode arch=compute_$(arch),code=\"sm_$(arch),compute_$(arch)\")
 CUDA_FLAGS = -std=c++14 --fmad=false --cudart=static \
     $(CUDA_GENCODE) \

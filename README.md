@@ -76,8 +76,8 @@ supply the matching user-space CUDA runtime and CuPy wheel; pass `--gpus all`
 when running GPU code. The default build is ARM64/CUDA 13:
 
 ```sh
-VERSION=local make image                  # All five roles
-VERSION=local make image TARGET=full      # Combined check/benchmark image
+VERSION=local make container                  # All five roles
+VERSION=local make container TARGET=full      # Combined check/benchmark image
 ```
 
 | Role | Tag | Contents |
