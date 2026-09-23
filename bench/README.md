@@ -1,36 +1,187 @@
-# Benchmark
+# Benchmarks
 
-On a GPU host, install the matching CuPy wheel and pinned CPU comparator,
-build CUDA C/C++, then measure all three implementations:
+The tools in this checkout measure CPU L.A.Cosmic, the installed CuPy
+package, and the compiled CUDA library using the same saved FITS
+scene.
+For installation and CUDA build requirements, see the [main
+README](../README.md#build-and-check).
+Run commands from the repository root.
+
+## Run locally
 
 ```sh
-python -m pip install -e '.[cuda13,bench]'
-make build
-make bench
+make bench REFERENCE=exact
+make bench BACKENDS='cpu cupy' REFERENCE=exact  # No CUDA C/C++ build
+make bench BACKENDS=cpu BENCH_ARGS='--frames 1 --warmups 1 --repeats 2'
 ```
 
-Use `cuda12` with a CUDA 12 runtime. If CuPy is already installed, `.[bench]`
-adds L.A.Cosmic without replacing CuPy. On a CPU-only host, run
-`python -m pip install '.[bench]'` and `python -m bench.cpu --frames 1` to
-measure L.A.Cosmic alone.
+Defaults are 1, 4, and 16 frames, four warmups, and sixteen measured
+samples per case.
+CPU-only runs need just `pip install '.[bench]'`.
+You can also run the Python orchestrator directly;
+it expects the CUDA executable to be built already if that backend is
+selected:
 
-`make bench` uses the saved frame and error map in `test/data/` for 1, 4,
-and 16 frames, with four warmups and sixteen repeated samples. A shorter
-run is `python -m bench.run --frames 4`. The runner records completed
-backends and explicit failures when a GPU is unavailable. It reports
-completed measurements even when a backend fails; unavailable timings
-are marked in the comparison table.
+```sh
+CUSMIC_REFERENCE=exact python -m bench.run --backends cpu cupy --frames 1 4 16
+```
 
-Each backend checks its pixels and mask against the saved reference outside
-the timed interval. GPU records retain both bitwise agreement and the
-32-epsilon pixel comparison used after arithmetic reordering; saved-scene masks
-must still match exactly. JSON files hold all samples and hardware details;
-`comparison.csv` contains available per-frame medians and speedups;
-`failures.json` identifies missing backends. Output is written
-to the ignored `bench/results/` directory by default, or to `/data/results`
-in the full Docker image.
+`REFERENCE=exact` is the Make default for v0.2.x;
+select `close` for v0.3.x.
+Direct Python and Docker runs use `CUSMIC_REFERENCE`.
+The [test guide](../test/README.md#reference-policy) defines both
+policies.
+GPU records retain actual bit equality and maximum error even in close
+mode.
+CPU L.A.Cosmic always uses the exact saved reference.
+Every measured cleaning result is checked outside the timing interval,
+and repeated GPU outputs must be identical.
 
-GPU timings wait for completion and separate first use, upload, resident
-cleaning, download, and ordinary total. CPU cleaning and total use the same
-ordinary calls. Separately timed stages need not add up to total because
-each timing has its own setup.
+Cases run independently:
+a missing GPU, build error, or failed comparison returns a nonzero
+status while preserving completed measurements.
+
+## Read reports
+
+Results default to `bench/results/`.
+Set `--output DIRECTORY` in `BENCH_ARGS` or the Python runner to keep
+separate runs.
+Reusing a directory replaces the selected cases;
+use a fresh directory for each comparison.
+
+| File | Contents |
+| --- | --- |
+| `BACKEND-FRAMES.json` | Successful case, environment, reference checks, timing samples |
+| `BACKEND-FRAMES.log`  | Backend progress and errors                                    |
+| `summary.txt`         | Per-frame medians, means, sample SD, range, and speedups       |
+| `comparison.csv`      | Median timings and speedups                                    |
+| `failures.json`       | Failed cases; absent after a fully successful run              |
+
+First use is reported separately in milliseconds per whole call.
+GPU stages measure upload, resident cleaning, download, and complete
+calls, including synchronization.
+Complete calls include allocation and transfers;
+disk I/O, progress output, and reference checks are excluded.
+Separately timed stages need not sum to the complete call.
+CPU clean/total fields describe the same ordinary calls.
+
+Individual backends (`python -m bench.cpu`, `python -m bench.bench`,
+and `build/cuda/bench`) emit JSON on stdout and progress on stderr.
+Their `--output` option appends JSONL records;
+the orchestrator instead writes one JSON file per case.
+
+CuPy records identify the installed package path.
+Editable and Git URL installations supply a revision;
+ordinary wheel/local-copy installations report `unknown` unless the
+build supplies `CUSMIC_REVISION`.
+Editable installs also report tracked source changes.
+CUDA records embed the revision at compilation;
+rebuild after changing sources or flags.
+A revision alone does not prove that a compiled library came from an
+unmodified tree.
+
+## A/B with one shared toolset
+
+Keep tests, benchmark scripts, and saved data in this checkout.
+Install each implementation from a separate worktree into the same
+Python environment so dependencies and input paths stay fixed:
+
+```sh
+git worktree add --detach ../cusmic-a v0.2.6
+git worktree add --detach ../cusmic-b v0.3.0
+for side in a b; do
+    python -m pip install --no-deps -e "../cusmic-$side"
+    policy=exact
+    if [ "$side" = b ]; then policy=close; fi
+    CUSMIC_REFERENCE=$policy python -m bench.run --backends cupy \
+        --output "bench/results/$side"
+done
+python -m bench.ab bench/results/a bench/results/b --backends cupy
+```
+
+The report requires distinct recorded Git revisions, matching
+hardware, runtimes, dependencies, settings, frame counts, and timing
+parameters, plus passing reference checks.
+Known dirty source trees are rejected.
+Build from clean worktrees and leave the saved data unchanged;
+records do not capture all source and input modifications.
+Use `--frames` to compare a subset.
+
+To include CUDA, replace the runner command inside the loop with:
+
+```sh
+make -B bench SRC="../cusmic-$side/src" BACKENDS='cupy cuda' \
+    REFERENCE="$policy" BENCH_ARGS="--output bench/results/$side"
+```
+
+`SRC` selects the CUDA implementation;
+`-B` prevents stale library reuse when switching sources.
+Then omit `--backends cupy` from the A/B report.
+Use the same `SRC` and `REFERENCE` with `make -B e2e` for shared
+reference checks.
+Run full `make check` from each version's own checkout because unit
+regressions can require fixes absent from the other release.
+Restore your development installation afterward:
+
+```sh
+python -m pip install --no-deps -e .
+```
+
+A/B output includes median and mean speedups and sample spread.
+Use an idle GPU and repeat in reverse order when investigating small
+differences or pauses.
+
+## Docker
+
+Only the full image includes tests and benchmark tools.
+Build it with `make container TARGET=full VERSION=0.2.6-dev`.
+The default command runs checks and then benchmarks, saving both logs
+and `status.txt`:
+
+```sh
+mkdir -p results
+docker run --rm --gpus all -e CUSMIC_REFERENCE=exact \
+    -v "$PWD/results:/data/results" rndsrc/cusmic:0.2.6-dev
+```
+
+Use `exact` for v0.2.x.  Append benchmark options after the image name, such as
+`--frames 1 --backends cpu cupy`.  To run only benchmarks:
+
+```sh
+docker run --rm --gpus all -e CUSMIC_REFERENCE=exact --entrypoint python \
+    -v "$PWD/results:/data/results" rndsrc/cusmic:0.2.6-dev \
+    -m bench.run --output /data/results --frames 1 4 16
+```
+
+For A/B testing, build one full image per implementation revision with
+the same toolset, run each into a separate result directory, then pass
+those directories to `python -m bench.ab`.
+Existing release images retain their original scripts until rebuilt.
+See the [container guide](../README.md#docker-images) for CUDA
+profiles, platforms, and host driver requirements.
+
+## Recorded GB10 measurements
+
+NVIDIA GB10, a 512 × 512 float64 reference image, four warmups, and
+sixteen measured calls.
+These are historical v0.2.5 measurements; v0.2.6 retains its exact
+cleaning algorithms.
+Values are median milliseconds per frame.
+GPU complete calls include allocation, upload, cleaning, and download;
+disk I/O is excluded.
+The CPU ran L.A.Cosmic 1.4.0, and CuPy was 14.2 with CUDA 13.0.2.
+
+| Frames | CPU L.A.Cosmic | Exact CuPy | Exact CUDA |
+| ---: | ---: | ---: | ---: |
+|  1 | 680.481 | 10.190 | 6.629 |
+|  4 | 683.897 |  9.614 | 6.252 |
+| 16 | 680.504 |  9.800 | 6.658 |
+
+Outputs matched the saved pixels and masks bit for bit.
+The initial 16-frame CuPy run had unexplained pauses: its mean was
+12.313 ms/frame despite the lower median.
+First-use and separate transfer timings remain in the original
+benchmark reports.
+These measurements predate the shared-tool rebuild; fresh GPU runs
+are required to qualify the rebuilt release.
+The original single-GPU run could not pass the two-GPU check.
