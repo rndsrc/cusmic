@@ -29,6 +29,10 @@
 #include <sstream>
 #include <vector>
 
+#ifndef CUSMIC_REVISION
+#define CUSMIC_REVISION "unknown"
+#endif
+
 using clock_type = std::chrono::steady_clock;
 
 struct fits_pixels {
@@ -58,11 +62,17 @@ struct scene {
 	fits_pixels input, error, expected, flags;
 	cusmic_options options;
 	size_t w, h, n;
+	const char *mode;
 
 	scene(const char *path, const char *noise, const char *reference)
 	    : input(path), error(noise), expected(reference), flags(reference, "CRMASK"),
 	      w(input.im.axes[0]), h(input.im.axes[1]), n(w * h)
 	{
+		mode = std::getenv("CUSMIC_REFERENCE");
+		if (!mode)
+			mode = "exact";
+		if (std::strcmp(mode, "exact") && std::strcmp(mode, "close"))
+			throw std::invalid_argument("CUSMIC_REFERENCE must be exact or close");
 		for (const auto *im : {&error.im, &expected.im, &flags.im})
 			if (im->axes[0] != long(w) || im->axes[1] != long(h))
 				throw std::invalid_argument("reference shapes differ");
@@ -108,15 +118,15 @@ struct scene {
 				result.exact = false;
 				double actual = out.clean[at], expected_value = expected.im.data[i];
 				double difference = std::abs(actual - expected_value);
-				bool close = (std::isnan(actual) && std::isnan(expected_value)) ||
+				bool close = got == want ||
 					(std::isfinite(actual) && std::isfinite(expected_value) &&
 					 difference <= eps * (1 + std::abs(expected_value)));
-				if (got_mask != want_mask || !close) {
+				if (got_mask != want_mask || !close || !std::strcmp(mode, "exact")) {
 					char msg[240];
 					std::snprintf(msg, sizeof(msg),
-						"frame %d, y %zu, x %zu: pixel %.17g/%.17g "
+						"%s reference, frame %d, y %zu, x %zu: pixel %.17g/%.17g "
 						"(0x%016llx/0x%016llx), mask %u/%u",
-						f, i / w, i % w, actual, expected_value,
+						mode, f, i / w, i % w, actual, expected_value,
 						(unsigned long long)got, (unsigned long long)want,
 						got_mask, want_mask);
 					throw std::runtime_error(msg);
@@ -202,25 +212,33 @@ benchmark(const scene &ref, int nf, int warmups, int repeats)
 		return download(clean(input, ref.options, total), total);
 	};
 
+	std::fprintf(stderr, "CUDA: first result (%d frames, %d warmups, %d samples)\n",
+		nf, warmups, repeats);
 	auto start = clock_type::now();
 	auto first = complete();
 	times.first_ms = std::chrono::duration<double, std::milli>(clock_type::now() - start).count();
 	auto quality = ref.check(first, nf);
 	times.reference_exact = quality.exact;
 	times.max_abs_error = quality.max_abs_error;
-	for (int i = 0; i < warmups; ++i)
+	for (int i = 0; i < warmups; ++i) {
+		std::fprintf(stderr, "CUDA: ordinary warmup %d/%d\n", i + 1, warmups);
 		complete();
+	}
 
 	double ms;
 	for (int i = 0; i < repeats; ++i) {
+		std::fprintf(stderr, "CUDA: upload %d/%d\n", i + 1, repeats);
 		auto input = timed([&] { return device_input(stack, ref, nf); }, ms);
 		times.upload_ms.push_back(ms);
 	}
 
 	device_input resident(stack, ref, nf);
-	for (int i = 0; i < warmups; ++i)
+	for (int i = 0; i < warmups; ++i) {
+		std::fprintf(stderr, "CUDA: resident warmup %d/%d\n", i + 1, warmups);
 		timed([&] { return clean(resident, ref.options, total); }, ms);
+	}
 	for (int i = 0; i < repeats; ++i) {
+		std::fprintf(stderr, "CUDA: clean/download %d/%d\n", i + 1, repeats);
 		auto out = timed([&] { return clean(resident, ref.options, total); }, ms);
 		times.clean_ms.push_back(ms);
 		auto host = timed([&] { return download(out, total); }, ms);
@@ -229,6 +247,7 @@ benchmark(const scene &ref, int nf, int warmups, int repeats)
 	}
 
 	for (int i = 0; i < repeats; ++i) {
+		std::fprintf(stderr, "CUDA: ordinary total %d/%d\n", i + 1, repeats);
 		auto host = timed(complete, ms);
 		times.total_ms.push_back(ms);
 		ref.check(host, nf, &first);
@@ -284,7 +303,6 @@ report(const scene &ref, const measurements &times, int nf, int warmups, int rep
 	cuda_check(cudaGetDeviceProperties(&gpu, device));
 	cuda_check(cudaRuntimeGetVersion(&runtime));
 	cuda_check(cudaDriverGetVersion(&driver));
-	const char *revision = std::getenv("CUSMIC_REVISION");
 	const auto &o = ref.options;
 	std::ostringstream out;
 	out << std::setprecision(12) << "{\"backend\":\"cuda\",\"dtype\":\"float64\",\"shape\":[";
@@ -297,9 +315,10 @@ report(const scene &ref, const measurements &times, int nf, int warmups, int rep
 	    << o.contrast << ",\"cr_threshold\":" << o.cr_threshold
 	    << ",\"neighbor_threshold\":" << o.neighbor_threshold << ",\"maxiter\":"
 	    << o.maxiter << "},\"source_revision\":"
-	    << json_string(revision ? revision : "unknown") << ",\"cusmic\":"
+	    << json_string(CUSMIC_REVISION) << ",\"cusmic\":"
 	    << json_string(cusmic_version()) << ",\"gpu\":" << json_string(gpu.name)
 	    << ",\"cuda_runtime\":" << runtime << ",\"cuda_driver\":" << driver
+	    << ",\"reference_mode\":" << json_string(ref.mode)
 	    << ",\"reference_close\":true,\"reference_exact\":"
 	    << (times.reference_exact ? "true" : "false")
 	    << ",\"max_abs_error\":" << times.max_abs_error
@@ -363,6 +382,7 @@ main(int argc, char **argv)
 			if (!file || !(file << line << '\n'))
 				throw std::runtime_error("cannot write benchmark output");
 		}
+		std::fprintf(stderr, "CUDA: done\n");
 		return 0;
 	} catch (const std::exception &e) {
 		std::fprintf(stderr, "%s\n", e.what());

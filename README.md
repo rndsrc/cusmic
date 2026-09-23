@@ -1,116 +1,191 @@
 # cusmic
 
-L.A.Cosmic cosmic-ray removal in CuPy and CUDA C/C++. The v0.2.x releases
-preserve float64 operation order and match the saved L.A.Cosmic reference bit
-for bit. v0.3.x uses a fused Laplacian with the same mathematical stencil but
-different rounding; well-separated reference detections must still match.
-For finite reference pixels, the check is
-`abs(cleaned-reference) <= 32*eps*(1+abs(reference))`, with `eps` the float64
-machine epsilon. Threshold ties may change after rounding. L.A.Cosmic supplies
-the CPU benchmark and reference; cusmic has no CPU cleaner.
+GPU L.A.Cosmic cosmic-ray removal with CuPy and CUDA C/C++ APIs and
+FITS commands.
+Both implementations support float64 images and independent frames in
+a stack.
+L.A.Cosmic 1.4.0 supplies the CPU reference and benchmarks;
+cusmic has no CPU cleaner.
 
-## Install and use
+The v0.2.x line preserves the reference's float64 operation order.
+The v0.3.x line allows rounding differences while keeping the same
+algorithm.
+Tests require identical masks for both;
+see the [reference policy](test/README.md#reference-policy).
 
-Install the CuPy wheel that matches your CUDA runtime:
+## Install
 
-```sh
-python -m pip install '.[cuda13]'
-# Use '.[cuda12]' on a CUDA 12 host.
-```
-
-CuPy already installed? `python -m pip install .` leaves it alone. Add `cli`
-for the FITS command, and `test` or `bench` only when you need them:
+Install from this checkout with the CuPy wheel matching your CUDA
+runtime:
 
 ```sh
-python -m pip install '.[cuda13,cli,test,bench]' ruff
+python -m pip install '.[cuda13,cli]'
+# For CUDA 12, use '.[cuda12,cli]'.
 ```
 
-```python
-import cupy as cp
-from cusmic import remove_cosmics
+If CuPy is already installed, use `.[cli]`.
+For the Python API alone, omit `cli`;
+`pip install .` does not install or replace CuPy.
+Cleaning requires a compatible NVIDIA GPU and driver.
 
-cleaned, mask = remove_cosmics(cp.asarray(data, dtype=cp.float64),
-                              1, 5, 5, error=error)
-```
-
-The three thresholds and their names follow L.A.Cosmic. Cleaning requires a
-GPU and returns independent CuPy arrays. NumPy inputs are uploaded to the GPU.
-Provide an error map, or `effective_gain` and `readnoise`; an error map takes
-precedence. Images are nonempty float64 frames or stacks. Use ordinary CuPy
-slices to select frames, and keep borrowed inputs valid through the call.
-
-With `cli` installed, the CuPy command is `cupysmic` (or `python -m cusmic`).
-The CUDA C/C++ command is `bin/cudasmic` after `make build`:
+## Clean a FITS image
 
 ```sh
 cupysmic input.fits cleaned.fits --error error.fits
-bin/cudasmic input.fits cleaned-cuda.fits --error error.fits
+# Or estimate noise from gain (electrons/ADU) and read noise (electrons):
+cupysmic input.fits cleaned.fits --gain 2 --readnoise 5
 ```
 
-Both commands read one FITS frame, write cleaned pixels and a `CRMASK`
-extension, and refuse to overwrite files. They interpret FITS scaling and
-integer `BLANK` consistently. Use `--help` for the small set of options.
-The public C header is [src/cusmic.h](src/cusmic.h).
+`python -m cusmic` runs the same command.
+After building the CUDA executable, replace `cupysmic` with
+`bin/cudasmic`.
 
-## Build and measure locally
+Both commands read one 2D image, apply FITS scaling and integer
+`BLANK` values, and write a float64 primary image plus a byte `CRMASK`
+extension.
+They preserve image metadata, update checksums, and refuse to
+overwrite existing files.
+Read noise defaults to zero; `--error` overrides the noise model.
+Use `--help` for detection thresholds and iteration options.
 
-The CUDA C/C++ build needs `nvcc`, a C compiler, Make, and CFITSIO headers.
-Run `make` to see the available targets. On a GPU host with the Python extras
-above:
+## Python and C APIs
+
+```python
+from cusmic import remove_cosmics
+from cusmic.io import read_fits
+
+image, _ = read_fits("input.fits", dtype="float64")
+error, _ = read_fits("error.fits", dtype="float64")
+cleaned, mask = remove_cosmics(
+    image, contrast=3, cr_threshold=5, neighbor_threshold=3, error=error,
+)
+```
+
+The function follows L.A.Cosmic's parameter names and returns
+independent CuPy arrays:
+cleaned float64 pixels and a boolean detection mask.
+NumPy inputs are uploaded; CuPy inputs stay on their device.
+Input pixels are never modified.
+
+* `data` must be a nonempty float64 frame `(height, width)` or stack
+  `(frames, height, width)`.
+  Noncontiguous CuPy slices are supported.
+* Supply a positive, finite `error` map, or both `effective_gain`
+  (positive) and `readnoise` (nonnegative).
+  An error map takes precedence.
+* Maps may match the entire input or one frame shared across a stack.
+  Gain, read noise, and `background` also accept scalars.
+  Background is added before cleaning and subtracted afterward;
+  data, error, and background use image units.
+* `mask` excludes pixels from detection seeds and replacement donors.
+  Growth from neighboring detections can still flag masked pixels.
+  Nonfinite input pixels are preserved and never flagged.
+* `maxiter=0` disables detection and needs no noise model.
+  Background arithmetic still applies and can round the result.
+
+For repeated calls, reuse `Cleaner` settings with `Image` inputs.
+Arrays are borrowed:
+keep them unchanged until work on the input device's current stream
+finishes.
+Use events to establish readiness when passing data between streams.
+See the API docstrings for parameters and [src/cusmic.h](src/cusmic.h)
+for the host, device, and batch C interfaces.
+
+## Build and check
+
+The CUDA build requires `nvcc`, a C compiler, Make, and CFITSIO
+headers and libraries.
+Set `CUDA_ARCHS` for the target GPU, such as `121` for Spark with CUDA
+13.
+Local builds default to `CUDA_ARCH=75`;
+container defaults are below.
 
 ```sh
-make build
-make check
-make bench
-make clean            # Remove generated build and benchmark files
+python -m pip install -e '.[cuda13,cli,test,bench]' ruff
+make build CUDA_ARCHS=121
+make check REFERENCE=close
+make bench REFERENCE=close
 ```
 
-`make check` runs Python and C/CUDA checks. GPU-dependent tests fail explicitly
-when no GPU is available, or when a two-GPU test has only one GPU; the other
-checks still run. `make bench` measures CPU L.A.Cosmic, CuPy, and CUDA for 1,
-4, and 16 frames with four warmups and sixteen samples. It writes a report of
-completed measurements and backend failures. On a CPU-only host, install
-`.[bench]` and run `python -m bench.cpu --frames 1` to measure L.A.Cosmic
-alone. Compare v0.2.5 and a v0.3 candidate on the same GPU with
-`python -m bench.ab BASELINE_RESULTS CANDIDATE_RESULTS`. See
-[test/README.md](test/README.md) and [bench/README.md](bench/README.md)
-for the fixtures and timing boundaries.
+Use `REFERENCE=exact` for v0.2.x; `exact` is the tooling default.
+The editable install keeps Python checks aligned with this checkout.
+Run `make` for targets and options, including `unit`, `e2e`, `ref`,
+`container`, and `clean`.
+`make clean` removes build outputs, benchmark results, and caches.
+
+The [test guide](test/README.md) covers host-only checks, GPU
+requirements, and reference generation.
+The [benchmark guide](bench/README.md) covers backend selection,
+timing reports, shared-tool A/B comparisons, and the recorded GB10
+measurements.
+CPU-only benchmarks need `.[bench]` and no CUDA installation.
+
+## Recorded performance
+
+Historical GB10 results for a 512 × 512 float64 frame, with four
+warmups and sixteen samples; median milliseconds per frame:
+
+| Frames | CPU L.A.Cosmic | Exact CuPy | Exact CUDA |
+| ---: | ---: | ---: | ---: |
+|  1 | 680.481 | 10.190 | 6.629 |
+|  4 | 683.897 |  9.614 | 6.252 |
+| 16 | 680.504 |  9.800 | 6.658 |
+
+GPU calls include allocation and transfers, with disk I/O excluded.
+The measurements used v0.2.5; v0.2.6 preserves those exact algorithms.
+See the [benchmark report](bench/README.md#recorded-gb10-measurements)
+for the environment, timing spread, and validation limits.
 
 ## Docker images
 
-The host supplies the NVIDIA driver and NVIDIA Container Toolkit. The images
-supply the matching user-space CUDA runtime and CuPy wheel; pass `--gpus all`
-when running GPU code. The default build is ARM64/CUDA 13:
+The host supplies the NVIDIA driver and Container Toolkit.
+Images provide the user-space runtime;
+pass `--gpus all` to run GPU code.
+Build all five roles or select the combined test/benchmark image:
 
 ```sh
-VERSION=local make image                  # All five roles
-VERSION=local make image TARGET=full      # Combined check/benchmark image
+make container VERSION=0.3.0-dev
+make container VERSION=0.3.0-dev TARGET=full
 ```
 
 | Role | Tag | Contents |
 | --- | --- | --- |
 | CuPy CLI | `rndsrc/cupysmic:<version>` | CuPy API and FITS command |
-| CuPy API | `rndsrc/cupysmic:<version>-slim` | CuPy API only |
-| CUDA CLI | `rndsrc/cudasmic:<version>` | C API and FITS command |
+| CuPy API | `rndsrc/cupysmic:<version>-slim` | CuPy API |
+| CUDA CLI | `rndsrc/cudasmic:<version>` | C library and FITS command |
 | CUDA API | `rndsrc/cudasmic:<version>-slim` | C library and header |
 | Full | `rndsrc/cusmic:<version>` | Both implementations, tests, benchmarks, demo |
 
-For a CUDA 12 build, set `CUDA=12`; each tag then ends in `-cuda12`. Set
-`PLATFORM=linux/amd64` for an x86-64 build, and set `CUDA_ARCHS` to that GPU's
-compute capability (for example, `CUDA_ARCHS=86`). The defaults target GPU
-architectures 87 and 121. An exact Git version tag supplies `VERSION`
-automatically; otherwise set it as above.
+Builds default to ARM64 and CUDA 13, targeting architectures 87 and
+121.
+`CUDA=12` selects CUDA 12, architecture 87, and a `-cuda12` tag
+suffix.
+For x86-64, set `PLATFORM=linux/amd64` and the appropriate
+`CUDA_ARCHS`, such as `86`.
+`VERSION` defaults to an exact Git version tag, or `0.0.0.dev0`
+when none matches; overrides must be valid Python versions.
 
 ```sh
 mkdir -p results
-docker run --rm --gpus all -v "$PWD/results:/data/results" rndsrc/cusmic:local
+docker run --rm --gpus all -e CUSMIC_REFERENCE=close \
+    -v "$PWD/results:/data/results" rndsrc/cusmic:0.3.0-dev
 ```
 
-The full image runs checks and then benchmarks, even if a check fails. Logs,
-completed measurements, failures, a comparison table, and a status file go to
-`results/`. Unavailable timings are marked in the table. Its exit status
-reports failures.
-On a Mac, the ARM64 images can start and show CLI help, but GPU cleaning
-requires an NVIDIA host.
+The full image runs checks followed by benchmarks, continuing after
+failures.
+It saves logs, measurements, comparison tables, failures, and
+`status.txt` to the mounted directory, and exits nonzero if either
+phase fails.
+Use `exact` for v0.2.x.  Append benchmark options such as `--frames 1
+4 --warmups 4 --repeats 16` after the image name.
+The [benchmark guide](bench/README.md#docker) includes benchmark-only
+runs.
+ARM64 images can show CLI help on a Mac; cleaning needs an NVIDIA
+host.
 
-The [demo notebook](demo/demo.ipynb) shows the saved scene and CuPy interface.
+## Demo
+
+The [notebook](demo/demo.ipynb) displays the saved scene and compares
+CPU and CuPy results and timings.
+Install `.[demo,bench]` alongside CuPy for local Jupyter, use its
+Colab setup, or open the copy included in the full image.

@@ -21,7 +21,12 @@ Array = Any
 
 @dataclass
 class Image:
-    """Borrowed float64 frame or stack and calibration validated on their device."""
+    """Borrowed float64 pixels with calibration validated on the input device.
+
+    Maps match the data or one shared frame. Gain, read noise, and background
+    may also be scalars. An error map overrides gain and read noise. See
+    :func:`remove_cosmics` for units, exclusions, and stream ownership.
+    """
 
     data:           Array
     error:          Array | None = None
@@ -66,7 +71,7 @@ class Image:
                     raise ValueError("mask must match the data or one frame")
 
     def noise(self, image=None, mode=None):
-        """Given errors, else the noise model evaluated on the working image."""
+        """Return errors, or evaluate the noise model on ``image`` with ``mode``."""
         if self.error is not None:
             return self.error
         from .filters import noise_model

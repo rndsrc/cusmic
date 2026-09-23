@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import subprocess
+import sys
 from pathlib import Path
 from time import perf_counter
 
@@ -66,17 +67,21 @@ def source_info():
 def benchmark(data, error, reference, frames, warmups, repeats):
     def call():
         return clean_batch(data, error)
+    print(f"CPU: first result ({warmups} warmups, {repeats} samples, "
+          f"{frames} frames)", file=sys.stderr, flush=True)
     first_ms, first = timed(call)
     exact_result(first, reference)
 
-    for _ in range(warmups):
+    for i in range(warmups):
+        print(f"CPU: warmup {i + 1}/{warmups}", file=sys.stderr, flush=True)
         call()
 
     samples = []
-    for _ in range(repeats):
+    for i in range(repeats):
+        print(f"CPU: ordinary total {i + 1}/{repeats}", file=sys.stderr, flush=True)
         elapsed, last = timed(call)
         samples.append(elapsed)
-    exact_result(last, reference)
+        exact_result(last, reference)
 
     stats = dict(median=float(np.median(samples)), minimum=min(samples),
                  maximum=max(samples), samples=samples)
@@ -116,6 +121,7 @@ def main():
     record = benchmark(data, error, (expected, mask), args.frames,
                        args.warmups, args.repeats)
     line = json.dumps(dict(record, input=str(args.input)))
+    print("CPU: reference passed; done", file=sys.stderr, flush=True)
     print(line)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

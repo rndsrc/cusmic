@@ -68,6 +68,7 @@ def test_input_validation(cp):
         Cleaner()(Image(data))
 
 
+@pytest.mark.host
 def test_cleaner_settings():
     from cusmic import Cleaner
 

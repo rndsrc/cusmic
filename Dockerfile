@@ -10,6 +10,7 @@ FROM	nvidia/cuda:${CUDA_TOOLKIT}-devel-ubuntu22.04 AS toolkit
 # Compile CUDA C/C++ on Bookworm, matching the runtime's C and FITS libraries.
 FROM	debian:bookworm-slim AS cuda-builder
 ARG	VERSION
+ARG	REVISION
 ARG	CUDA_ARCHS
 
 RUN	apt-get update &&\
@@ -23,7 +24,7 @@ COPY	src/ ./src/
 COPY	test/test_api.c test/test_io.c test/test_reference.c test/test_batch.cu ./test/
 COPY	bench/bench.cu ./bench/
 RUN	make cuda build/cuda/test_api build/cuda/test_io build/cuda/test_batch build/cuda/test_reference build/cuda/bench \
-	CC=/usr/bin/gcc-11 NVCC="/usr/local/cuda/bin/nvcc -ccbin=/usr/bin/g++-11" VERSION="$VERSION" CUDA_ARCHS="$CUDA_ARCHS"
+	CC=/usr/bin/gcc-11 NVCC="/usr/local/cuda/bin/nvcc -ccbin=/usr/bin/g++-11" VERSION="$VERSION" REVISION="$REVISION" CUDA_ARCHS="$CUDA_ARCHS"
 RUN	./build/cuda/test_io
 
 #------------------------------------------------------------------------------
@@ -143,4 +144,4 @@ COPY	LICENSE /usr/share/licenses/cusmic/LICENSE
 ENV	LD_LIBRARY_PATH=/src/build/cuda:/usr/local/lib \
 	PATH=/src/bin:$PATH \
 	CHECK_PREBUILT=1
-ENTRYPOINT	["sh", "/src/tool/report.sh"]
+ENTRYPOINT	["bash", "/src/tool/report.sh"]

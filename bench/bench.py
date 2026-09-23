@@ -4,11 +4,14 @@ import json
 import os
 import platform
 import subprocess
+from importlib.metadata import distribution
 from pathlib import Path
 from time import perf_counter
+from urllib.parse import unquote, urlparse
 
 import click
 import cupy as cp
+import cusmic
 import numpy as np
 from cusmic import Cleaner, Image, __version__
 from cusmic.io import read_fits
@@ -18,18 +21,24 @@ DATA = ROOT / "test/data"
 
 
 def source_info():
-    revision = os.environ.get("CUSMIC_REVISION", "unknown")
+    """Identify the installed package, never infer it from the benchmark checkout."""
+    direct = json.loads(distribution("cusmic").read_text("direct_url.json") or "{}")
+    revision = direct.get("vcs_info", {}).get("commit_id", "unknown")
     dirty = None
-    if (ROOT / ".git").exists():
+    if direct.get("dir_info", {}).get("editable"):
+        root = unquote(urlparse(direct["url"]).path)
         try:
             revision = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
             dirty = bool(subprocess.check_output(
                 ["git", "status", "--porcelain", "--untracked-files=no"],
-                cwd=ROOT, text=True))
+                cwd=root, text=True))
         except (OSError, subprocess.CalledProcessError):
             pass
-    return dict(source_revision=revision, source_dirty=dirty)
+    elif revision == "unknown":
+        revision = os.environ.get("CUSMIC_REVISION", "unknown")
+    return dict(source_revision=revision, source_dirty=dirty,
+                package_path=str(Path(cusmic.__file__).resolve()))
 
 
 def timed(call):
@@ -44,6 +53,8 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
     """First result includes CUDA initialization; warmed samples wait for all work."""
     cache = Path(os.environ.get("CUPY_CACHE_DIR", "~/.cupy/kernel_cache")).expanduser()
     cache_existed = cache.exists()
+    click.echo(f"CuPy: first result ({warmups} warmups, {repeats} samples, "
+               f"shape {data.shape})", err=True)
     start = perf_counter()
     cleaner = Cleaner(**settings)
 
@@ -59,18 +70,22 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
 
     first = end_to_end()
     first_ms = 1000 * (perf_counter() - start)
-    for _ in range(warmups):
+    for i in range(warmups):
+        click.echo(f"CuPy: ordinary warmup {i + 1}/{warmups}", err=True)
         end_to_end()
     samples = {name: [] for name in ("upload_ms", "clean_ms", "download_ms", "total_ms")}
-    for _ in range(repeats):
+    for i in range(repeats):
+        click.echo(f"CuPy: upload {i + 1}/{repeats}", err=True)
         elapsed, uploaded = timed(transfer)
         samples["upload_ms"].append(elapsed)
         del uploaded
 
     image = upload()
-    for _ in range(warmups):
+    for i in range(warmups):
+        click.echo(f"CuPy: resident warmup {i + 1}/{warmups}", err=True)
         timed(lambda: cleaner(image))
-    for _ in range(repeats):
+    for i in range(repeats):
+        click.echo(f"CuPy: clean/download {i + 1}/{repeats}", err=True)
         elapsed, result = timed(lambda: cleaner(image))
         samples["clean_ms"].append(elapsed)
         elapsed, downloaded = timed(lambda result=result: tuple(cp.asnumpy(a) for a in result))
@@ -80,7 +95,8 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
         del result, downloaded
 
     image = None
-    for _ in range(repeats):
+    for i in range(repeats):
+        click.echo(f"CuPy: ordinary total {i + 1}/{repeats}", err=True)
         elapsed, complete = timed(end_to_end)
         samples["total_ms"].append(elapsed)
         np.testing.assert_array_equal(complete[0].view("uint64"), first[0].view("uint64"))
@@ -116,6 +132,9 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
 @click.option("--output", type=click.Path(path_type=Path), help="Append a JSON record to this file.")
 def main(path, error, reference, frames, repeats, warmups, output):
     """Benchmark the saved L.A.Cosmic example; disk I/O is outside warmed timings."""
+    mode = os.environ.get("CUSMIC_REFERENCE", "exact")
+    if mode not in ("exact", "close"):
+        raise click.ClickException("CUSMIC_REFERENCE must be exact or close")
     data, _ = read_fits(path, dtype="float64")
     noise, _ = read_fits(error, dtype="float64")
     if frames > 1:
@@ -127,16 +146,23 @@ def main(path, error, reference, frames, repeats, warmups, output):
     expected = np.broadcast_to(expected, cleaned.shape)
     expected_mask = np.broadcast_to(expected_mask, mask.shape)
     eps = 32 * np.finfo(np.float64).eps
-    np.testing.assert_allclose(cleaned, expected, rtol=eps, atol=eps, equal_nan=True)
+    if mode == "exact":
+        np.testing.assert_array_equal(cleaned.view("uint64"), expected.view("uint64"))
+    else:
+        special = ~np.isfinite(expected)
+        np.testing.assert_array_equal(
+            cleaned[special].view("uint64"), expected[special].view("uint64"))
+        np.testing.assert_allclose(cleaned, expected, rtol=eps, atol=eps, equal_nan=True)
     np.testing.assert_array_equal(mask, expected_mask)
     finite = np.isfinite(expected)
     difference = np.abs(cleaned[finite] - expected[finite])
     line = json.dumps(dict(
-        record, input=str(Path(path)), reference_close=True,
+        record, input=str(Path(path)), reference_mode=mode, reference_close=True,
         reference_exact=bool(np.array_equal(cleaned.view("uint64"), expected.view("uint64"))),
         max_abs_error=float(difference.max()) if difference.size else 0.0,
         mask_disagreements=0,
     ))
+    click.echo("CuPy: reference passed; done", err=True)
     print(line)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
