@@ -212,25 +212,33 @@ benchmark(const scene &ref, int nf, int warmups, int repeats)
 		return download(clean(input, ref.options, total), total);
 	};
 
+	std::fprintf(stderr, "CUDA: first result (%d frames, %d warmups, %d samples)\n",
+		nf, warmups, repeats);
 	auto start = clock_type::now();
 	auto first = complete();
 	times.first_ms = std::chrono::duration<double, std::milli>(clock_type::now() - start).count();
 	auto quality = ref.check(first, nf);
 	times.reference_exact = quality.exact;
 	times.max_abs_error = quality.max_abs_error;
-	for (int i = 0; i < warmups; ++i)
+	for (int i = 0; i < warmups; ++i) {
+		std::fprintf(stderr, "CUDA: ordinary warmup %d/%d\n", i + 1, warmups);
 		complete();
+	}
 
 	double ms;
 	for (int i = 0; i < repeats; ++i) {
+		std::fprintf(stderr, "CUDA: upload %d/%d\n", i + 1, repeats);
 		auto input = timed([&] { return device_input(stack, ref, nf); }, ms);
 		times.upload_ms.push_back(ms);
 	}
 
 	device_input resident(stack, ref, nf);
-	for (int i = 0; i < warmups; ++i)
+	for (int i = 0; i < warmups; ++i) {
+		std::fprintf(stderr, "CUDA: resident warmup %d/%d\n", i + 1, warmups);
 		timed([&] { return clean(resident, ref.options, total); }, ms);
+	}
 	for (int i = 0; i < repeats; ++i) {
+		std::fprintf(stderr, "CUDA: clean/download %d/%d\n", i + 1, repeats);
 		auto out = timed([&] { return clean(resident, ref.options, total); }, ms);
 		times.clean_ms.push_back(ms);
 		auto host = timed([&] { return download(out, total); }, ms);
@@ -239,6 +247,7 @@ benchmark(const scene &ref, int nf, int warmups, int repeats)
 	}
 
 	for (int i = 0; i < repeats; ++i) {
+		std::fprintf(stderr, "CUDA: ordinary total %d/%d\n", i + 1, repeats);
 		auto host = timed(complete, ms);
 		times.total_ms.push_back(ms);
 		ref.check(host, nf, &first);
@@ -373,6 +382,7 @@ main(int argc, char **argv)
 			if (!file || !(file << line << '\n'))
 				throw std::runtime_error("cannot write benchmark output");
 		}
+		std::fprintf(stderr, "CUDA: done\n");
 		return 0;
 	} catch (const std::exception &e) {
 		std::fprintf(stderr, "%s\n", e.what());

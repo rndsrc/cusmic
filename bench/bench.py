@@ -53,6 +53,8 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
     """First result includes CUDA initialization; warmed samples wait for all work."""
     cache = Path(os.environ.get("CUPY_CACHE_DIR", "~/.cupy/kernel_cache")).expanduser()
     cache_existed = cache.exists()
+    click.echo(f"CuPy: first result ({warmups} warmups, {repeats} samples, "
+               f"shape {data.shape})", err=True)
     start = perf_counter()
     cleaner = Cleaner(**settings)
 
@@ -68,18 +70,22 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
 
     first = end_to_end()
     first_ms = 1000 * (perf_counter() - start)
-    for _ in range(warmups):
+    for i in range(warmups):
+        click.echo(f"CuPy: ordinary warmup {i + 1}/{warmups}", err=True)
         end_to_end()
     samples = {name: [] for name in ("upload_ms", "clean_ms", "download_ms", "total_ms")}
-    for _ in range(repeats):
+    for i in range(repeats):
+        click.echo(f"CuPy: upload {i + 1}/{repeats}", err=True)
         elapsed, uploaded = timed(transfer)
         samples["upload_ms"].append(elapsed)
         del uploaded
 
     image = upload()
-    for _ in range(warmups):
+    for i in range(warmups):
+        click.echo(f"CuPy: resident warmup {i + 1}/{warmups}", err=True)
         timed(lambda: cleaner(image))
-    for _ in range(repeats):
+    for i in range(repeats):
+        click.echo(f"CuPy: clean/download {i + 1}/{repeats}", err=True)
         elapsed, result = timed(lambda: cleaner(image))
         samples["clean_ms"].append(elapsed)
         elapsed, downloaded = timed(lambda result=result: tuple(cp.asnumpy(a) for a in result))
@@ -89,7 +95,8 @@ def benchmark(data, error, settings, repeats=16, warmups=4):
         del result, downloaded
 
     image = None
-    for _ in range(repeats):
+    for i in range(repeats):
+        click.echo(f"CuPy: ordinary total {i + 1}/{repeats}", err=True)
         elapsed, complete = timed(end_to_end)
         samples["total_ms"].append(elapsed)
         np.testing.assert_array_equal(complete[0].view("uint64"), first[0].view("uint64"))
@@ -155,6 +162,7 @@ def main(path, error, reference, frames, repeats, warmups, output):
         max_abs_error=float(difference.max()) if difference.size else 0.0,
         mask_disagreements=0,
     ))
+    click.echo("CuPy: reference passed; done", err=True)
     print(line)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
